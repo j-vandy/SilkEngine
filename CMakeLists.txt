@@ -1,16 +1,15 @@
 # minimum CMake version required to use vcpkg manifest mode
 cmake_minimum_required(VERSION 3.21)
-
-project(SilkEngine LANGUAGES CXX)
+project(SilkEngine VERSION 1.0.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# find dependencies managed by vcpkg
-find_package(glfw3 REQUIRED)
+add_executable(main main.cpp)
+
+# link vcpkg manifest dependencies
+find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(Vulkan REQUIRED)
 
-add_executable(${PROJECT_NAME} main.cpp)
-
-target_link_libraries(${PROJECT_NAME} PRIVATE glfw Vulkan::Vulkan glm::glm)
+target_link_libraries(main PRIVATE glfw glm::glm Vulkan::Vulkan)

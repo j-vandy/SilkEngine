@@ -1,5 +1,5 @@
 # SilkEngine  
-A 2D radiance cascades game engine built on Vulkan. This project uses **vcpkg** as the package manager and **CMake** as the build system.
+A 2D radiance cascades game engine built on **Vulkan**. This project uses **vcpkg** as the package manager, **CMake** as the build system generator, and **Ninja** as the build system.
 
 ## Installation
 
@@ -8,7 +8,7 @@ Download and [install Git](https://git-scm.com/downloads).
 
 ---
 
-### 2. Install GCC (C++ Compiler) via MSYS2  
+### 2. Install GCC (C++ Compiler) & Ninja via MSYS2  
 1. Download and [install MSYS2](https://www.msys2.org/).
 2. Open the **MSYS2 UCRT64** terminal.
 3. Run the following command:
@@ -16,10 +16,10 @@ Download and [install Git](https://git-scm.com/downloads).
     pacman -Syu
     ```
 4. **Important:** Close and reopen the **MSYS2 UCRT64** terminal after this command finishes.
-5. Run the remaining commands:
+5. Run the remaining commands to install GCC and Ninja:
     ```bash
     pacman -Syu
-    pacman -S --needed base-devel mingw-w64-ucrt-x86_64-toolchain
+    pacman -S --needed base-devel mingw-w64-ucrt-x86_64-toolchain mingw-w64-ucrt-x86_64-ninja
     ```
 6. Add `C:\msys64\ucrt64\bin` to your **System PATH** environment variable.
 
@@ -29,13 +29,14 @@ Download and [install Git](https://git-scm.com/downloads).
 1. Open **Command Prompt**.
 2. Run the following commands:
     ```bash
-    git clone https://github.com/microsoft/vcpkg.git
-    cd vcpkg
+    git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+    cd C:\vcpkg
     .\bootstrap-vcpkg.bat
     ```
 3. Create a new **User variable**:
    - Variable name: `VCPKG_ROOT`
    - Variable value: `C:\vcpkg`
+
 ---
 
 ### 4. Install CMake  
@@ -48,8 +49,6 @@ Download and [install Git](https://git-scm.com/downloads).
 After completing the steps above, you can build the project with:
 
 ```bash
-mkdir build
-cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=../vcpkg/scripts/buildsystems/vcpkg.cmake
-cmake --build .
+cmake --preset default
+cmake --build build --preset default
 ```
