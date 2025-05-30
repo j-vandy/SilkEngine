@@ -7,6 +7,7 @@
 #include <glm/mat4x4.hpp>
 
 #include <vector>
+#include <cstring>
 #include <iostream>
 
 const uint32_t WIDTH = 800;
@@ -51,6 +52,35 @@ int main()
     // create VkInstance
     VkInstance instance;
     {
+        // check validation layer support
+        if (enableValidationLayers)
+        {
+            uint32_t layerCount;
+            vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+
+            std::vector<VkLayerProperties> availableLayers(layerCount);
+            vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+            
+            for (const char* layerName : validationLayers)
+            {
+                bool layerFound = false;
+                for (const auto& layerProperties : availableLayers)
+                {
+                    if (strcmp(layerName, layerProperties.layerName) == 0)
+                    {
+                        layerFound = true;
+                        break;
+                    }
+                }
+                
+                if (!layerFound)
+                {
+                    std::cout << "Error: validation layers requested but not available!" << std::endl;
+                    return EXIT_FAILURE;
+                }
+            }
+        }
+
         VkApplicationInfo applicationInfo{};
         applicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         applicationInfo.pApplicationName = APPLICATION_NAME;
