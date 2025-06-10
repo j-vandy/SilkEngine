@@ -18,6 +18,8 @@ const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 const char* APPLICATION_NAME = "Silk Engine Main";
 const char* ENGINE_NAME = "Silk Engine";
+const int MAX_FRAMES_IN_FLIGHT = 2;
+bool framebufferResized = false;
 
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
@@ -100,26 +102,226 @@ static std::vector<char> readFile(const std::string& filename)
     return buffer;
 }
 
-void createShaderModule(const VkDevice device, VkShaderModule& shaderModule, const std::vector<char>& code)
+VkResult createShaderModule(const VkDevice device, VkShaderModule& shaderModule, const std::vector<char>& code)
 {
     VkShaderModuleCreateInfo shaderModuleCreateInfo{};
     shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     shaderModuleCreateInfo.codeSize = code.size();
     shaderModuleCreateInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+    return vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule);
+}
 
-    if (vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule) != VK_SUCCESS)
+void framebufferResizeCallback(GLFWwindow* window, int width, int height)
+{
+    framebufferResized = true;
+}
+
+// create swapchain
+VkResult createSwapchain(const VkPhysicalDevice physicalDevice, const VkSurfaceKHR surface, GLFWwindow* window, const VkDevice device, VkSwapchainKHR& swapchain, VkFormat& swapchainImageFormat, VkExtent2D& swapchainExtent)
+{
+    // swapchain surface format
+    uint32_t surfaceFormatCount;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceFormatCount, nullptr);
+    std::vector<VkSurfaceFormatKHR> surfaceFormats(surfaceFormatCount);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceFormatCount, surfaceFormats.data());
+
+    VkSurfaceFormatKHR surfaceFormat = surfaceFormats[0];
+    for (const auto& availableSurfaceFormat : surfaceFormats)
     {
-        std::cout << "Error: failed to create VkShaderModule!";
+        if (availableSurfaceFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableSurfaceFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        {
+            surfaceFormat = availableSurfaceFormat;
+        }
     }
+
+    swapchainImageFormat = surfaceFormat.format;
+
+    // swapchain present mode
+    uint32_t presentModeCount;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr);
+    std::vector<VkPresentModeKHR> presentModes(presentModeCount);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, presentModes.data());
+
+    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    for (const auto& availablePresentMode : presentModes)
+    {
+        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+        {
+            presentMode = availablePresentMode;
+        }
+    }
+
+    // swapchain extent
+    VkSurfaceCapabilitiesKHR surfaceCapabilities;
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
+
+    if (surfaceCapabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+    {
+        swapchainExtent= surfaceCapabilities.currentExtent;
+    }
+    else
+    {
+        int width, height;
+        glfwGetFramebufferSize(window, &width, &height);
+
+        swapchainExtent= {
+            static_cast<uint32_t>(width),
+            static_cast<uint32_t>(height)
+        };
+
+        swapchainExtent.width = std::clamp(swapchainExtent.width, surfaceCapabilities.minImageExtent.width, surfaceCapabilities.maxImageExtent.width);
+        swapchainExtent.height = std::clamp(swapchainExtent.height, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
+    }
+
+    uint32_t imageCount= surfaceCapabilities.minImageCount + 1;
+    if (surfaceCapabilities.maxImageCount > 0 && imageCount > surfaceCapabilities.maxImageCount)
+    {
+        imageCount = surfaceCapabilities.maxImageCount;
+    }
+
+    VkSwapchainCreateInfoKHR swapchainCreateInfo{};
+    swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapchainCreateInfo.surface = surface;
+    swapchainCreateInfo.minImageCount = imageCount;
+    swapchainCreateInfo.imageFormat = surfaceFormat.format;
+    swapchainCreateInfo.imageColorSpace = surfaceFormat.colorSpace;
+    swapchainCreateInfo.imageExtent = swapchainExtent;
+    swapchainCreateInfo.imageArrayLayers = 1;
+    swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    std::optional<uint32_t> graphicsQueueFamilyIndex, presentQueueFamilyIndex;
+    findQueueFamilyIndex(physicalDevice, surface, graphicsQueueFamilyIndex, presentQueueFamilyIndex);
+    uint32_t queueFamilyIndices[] = { graphicsQueueFamilyIndex.value(), presentQueueFamilyIndex.value() };
+
+    if (graphicsQueueFamilyIndex != presentQueueFamilyIndex)
+    {
+        swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        swapchainCreateInfo.queueFamilyIndexCount = 2;
+        swapchainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
+    }
+    else
+    {
+        swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    }
+
+    swapchainCreateInfo.preTransform = surfaceCapabilities.currentTransform;
+    swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapchainCreateInfo.presentMode = presentMode;
+    swapchainCreateInfo.clipped = VK_TRUE;
+    swapchainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
+
+    return vkCreateSwapchainKHR(device, &swapchainCreateInfo, nullptr, &swapchain);
+}
+
+VkResult createImageViews(const VkDevice device, const VkSwapchainKHR swapchain, const VkFormat swapchainImageFormat, std::vector<VkImageView>& swapchainImageViews)
+{
+    std::vector<VkImage> swapchainImages;
+    uint32_t imageCount;
+    vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr);
+    swapchainImages.resize(imageCount);
+    vkGetSwapchainImagesKHR(device, swapchain, &imageCount, swapchainImages.data());
+
+    swapchainImageViews.resize(swapchainImages.size());
+
+    for (size_t i = 0; i < swapchainImages.size(); i++)
+    {
+        VkImageViewCreateInfo imageViewCreateInfo{};
+        imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        imageViewCreateInfo.image = swapchainImages[i];
+        imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        imageViewCreateInfo.format = swapchainImageFormat;
+        imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+        imageViewCreateInfo.subresourceRange.levelCount = 1;
+        imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+        imageViewCreateInfo.subresourceRange.layerCount = 1;
+
+        VkResult result = vkCreateImageView(device, &imageViewCreateInfo, nullptr, &swapchainImageViews[i]);
+        if (result != VK_SUCCESS)
+        {
+            return result;
+        }
+    }
+
+    return VK_SUCCESS;
+}
+
+VkResult createFramebuffers(const std::vector<VkImageView>& swapchainImageViews, const VkRenderPass renderPass, const VkExtent2D swapchainExtent, const VkDevice device, std::vector<VkFramebuffer>& swapchainFramebuffers)
+{
+    swapchainFramebuffers.resize(swapchainImageViews.size());
+
+    for (size_t i = 0; i < swapchainImageViews.size(); i++)
+    {
+        VkImageView attachments[] = { swapchainImageViews[i] };
+
+        VkFramebufferCreateInfo framebufferCreateInfo{};
+        framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferCreateInfo.renderPass = renderPass;
+        framebufferCreateInfo.attachmentCount = 1;
+        framebufferCreateInfo.pAttachments = attachments;
+        framebufferCreateInfo.width = swapchainExtent.width;
+        framebufferCreateInfo.height = swapchainExtent.height;
+        framebufferCreateInfo.layers = 1;
+
+        VkResult result =  vkCreateFramebuffer(device, &framebufferCreateInfo, nullptr, &swapchainFramebuffers[i]);
+        if (result != VK_SUCCESS)
+        {
+            return result;
+        }
+    }
+    return VK_SUCCESS;
+}
+
+void cleanupSwapchain(VkDevice device, VkSwapchainKHR swapchain, std::vector<VkImageView>& swapchainImageViews, std::vector<VkFramebuffer>& swapchainFramebuffers)
+{
+    for (auto framebuffer: swapchainFramebuffers)
+    {
+        vkDestroyFramebuffer(device, framebuffer, nullptr);
+    }
+    for (auto imageView : swapchainImageViews)
+    {
+        vkDestroyImageView(device, imageView, nullptr);
+    }
+    vkDestroySwapchainKHR(device, swapchain, nullptr);
+}
+
+// recreateSwapchain
+VkResult recreateSwapchain(GLFWwindow* window, const VkDevice device, VkSwapchainKHR& swapchain, std::vector<VkImageView>& swapchainImageViews, std::vector<VkFramebuffer>& swapchainFramebuffers, const VkPhysicalDevice physicalDevice, const VkSurfaceKHR surface, VkExtent2D& swapchainExtent, const VkRenderPass renderPass)
+{
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(window, &width, &height);
+    while (width == 0 || height == 0)
+    {
+        glfwGetFramebufferSize(window, &width, &height);
+        glfwWaitEvents();
+    }
+
+    vkDeviceWaitIdle(device);
+
+    cleanupSwapchain(device, swapchain, swapchainImageViews, swapchainFramebuffers);
+
+    VkResult result;
+    VkFormat swapchainImageFormat;
+    result = createSwapchain(physicalDevice, surface, window, device, swapchain, swapchainImageFormat, swapchainExtent);
+    if (result != VK_SUCCESS) { return result; }
+    result = createImageViews(device, swapchain, swapchainImageFormat, swapchainImageViews);
+    if (result != VK_SUCCESS) { return result; }
+    result = createFramebuffers(swapchainImageViews, renderPass, swapchainExtent, device, swapchainFramebuffers);
+    if (result != VK_SUCCESS) { return result; }
+    return VK_SUCCESS;
 }
 
 int main()
 {
     // init glfw
     glfwInit();
-
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, APPLICATION_NAME, nullptr, nullptr);
+    glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
     // create VkInstance
     VkInstance instance;
@@ -330,140 +532,20 @@ int main()
 
     // create VkSwapchainKHR
     VkSwapchainKHR swapchain;
-    std::vector<VkImage> swapchainImages;
-    VkFormat swapchainImageFormat;
+    VkFormat swapchainImageFormat; // TODO: scope ends after create render pass
     VkExtent2D swapchainExtent;
+    if (createSwapchain(physicalDevice, surface, window, device, swapchain, swapchainImageFormat, swapchainExtent) != VK_SUCCESS)
     {
-        // swapchain surface format
-        uint32_t surfaceFormatCount;
-        vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceFormatCount, nullptr);
-        std::vector<VkSurfaceFormatKHR> surfaceFormats(surfaceFormatCount);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceFormatCount, surfaceFormats.data());
-
-        VkSurfaceFormatKHR surfaceFormat = surfaceFormats[0];
-        for (const auto& availableSurfaceFormat : surfaceFormats)
-        {
-            if (availableSurfaceFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableSurfaceFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-            {
-                surfaceFormat = availableSurfaceFormat;
-            }
-        }
-
-        swapchainImageFormat = surfaceFormat.format;
-
-        // swapchain present mode
-        uint32_t presentModeCount;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr);
-        std::vector<VkPresentModeKHR> presentModes(presentModeCount);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, presentModes.data());
-
-        VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
-        for (const auto& availablePresentMode : presentModes)
-        {
-            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
-            {
-                presentMode = availablePresentMode;
-            }
-        }
-
-        // swapchain extent
-        VkSurfaceCapabilitiesKHR surfaceCapabilities;
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
-
-        if (surfaceCapabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
-        {
-            swapchainExtent= surfaceCapabilities.currentExtent;
-        }
-        else
-        {
-            int width, height;
-            glfwGetFramebufferSize(window, &width, &height);
-
-            swapchainExtent= {
-                static_cast<uint32_t>(width),
-                static_cast<uint32_t>(height)
-            };
-
-            swapchainExtent.width = std::clamp(swapchainExtent.width, surfaceCapabilities.minImageExtent.width, surfaceCapabilities.maxImageExtent.width);
-            swapchainExtent.height = std::clamp(swapchainExtent.height, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
-        }
-
-        uint32_t imageCount= surfaceCapabilities.minImageCount + 1;
-        if (surfaceCapabilities.maxImageCount > 0 && imageCount > surfaceCapabilities.maxImageCount)
-        {
-            imageCount = surfaceCapabilities.maxImageCount;
-        }
-
-        VkSwapchainCreateInfoKHR swapchainCreateInfo{};
-        swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        swapchainCreateInfo.surface = surface;
-        swapchainCreateInfo.minImageCount = imageCount;
-        swapchainCreateInfo.imageFormat = surfaceFormat.format;
-        swapchainCreateInfo.imageColorSpace = surfaceFormat.colorSpace;
-        swapchainCreateInfo.imageExtent = swapchainExtent;
-        swapchainCreateInfo.imageArrayLayers = 1;
-        swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-        std::optional<uint32_t> graphicsQueueFamilyIndex, presentQueueFamilyIndex;
-        findQueueFamilyIndex(physicalDevice, surface, graphicsQueueFamilyIndex, presentQueueFamilyIndex);
-        uint32_t queueFamilyIndices[] = { graphicsQueueFamilyIndex.value(), presentQueueFamilyIndex.value() };
-
-        if (graphicsQueueFamilyIndex != presentQueueFamilyIndex)
-        {
-            swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-            swapchainCreateInfo.queueFamilyIndexCount = 2;
-            swapchainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
-        }
-        else
-        {
-            swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        }
-
-        swapchainCreateInfo.preTransform = surfaceCapabilities.currentTransform;
-        swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-        swapchainCreateInfo.presentMode = presentMode;
-        swapchainCreateInfo.clipped = VK_TRUE;
-        swapchainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
-
-        if (vkCreateSwapchainKHR(device, &swapchainCreateInfo, nullptr, &swapchain) != VK_SUCCESS)
-        {
-            std::cout << "Error: failed to create VkSwapchainKHR!" << std::endl;
-            return EXIT_FAILURE;
-        }
-
-        vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr);
-        swapchainImages.resize(imageCount);
-        vkGetSwapchainImagesKHR(device, swapchain, &imageCount, swapchainImages.data());
+        std::cout << "Error: failed to create VkSwapchainKHR!" << std::endl;
+        return EXIT_FAILURE;
     }
 
     // create VkImageViews
     std::vector<VkImageView> swapchainImageViews;
+    if (createImageViews(device, swapchain, swapchainImageFormat, swapchainImageViews) != VK_SUCCESS)
     {
-        swapchainImageViews.resize(swapchainImages.size());
-
-        for (size_t i = 0; i < swapchainImages.size(); i++)
-        {
-            VkImageViewCreateInfo imageViewCreateInfo{};
-            imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            imageViewCreateInfo.image = swapchainImages[i];
-            imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            imageViewCreateInfo.format = swapchainImageFormat;
-            imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-            imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-            imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-            imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-            imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-            imageViewCreateInfo.subresourceRange.levelCount = 1;
-            imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
-            imageViewCreateInfo.subresourceRange.layerCount = 1;
-
-            if (vkCreateImageView(device, &imageViewCreateInfo, nullptr, &swapchainImageViews[i]) != VK_SUCCESS)
-            {
-                std::cout << "Error: failed to create VkImageView!" << std::endl;
-            }
-        }
-
+        std::cout << "Error: failed to create VkImageViews!" << std:: endl;
+        return EXIT_FAILURE;
     }
 
     // create render pass
@@ -497,7 +579,7 @@ int main()
 
         if (vkCreateRenderPass(device, &renderPassCreateInfo, nullptr, &renderPass) != VK_SUCCESS)
         {
-            std::cout << "Error: failde to create VkRenderPass!" << std::endl;
+            std::cout << "Error: failed to create VkRenderPass!" << std::endl;
             return EXIT_FAILURE;
         }
     }
@@ -511,10 +593,18 @@ int main()
         std::vector<char> fragShaderCode = readFile("shaders/frag.spv");
 
         VkShaderModule vertShaderModule;
-        createShaderModule(device, vertShaderModule, vertShaderCode);
+        if (createShaderModule(device, vertShaderModule, vertShaderCode) != VK_SUCCESS)
+        {
+            std::cout << "Error: failed to create vertex VkShaderModule!" << std::endl;
+            return EXIT_FAILURE;
+        }
 
         VkShaderModule fragShaderModule;
-        createShaderModule(device, fragShaderModule, fragShaderCode);
+        if (createShaderModule(device, fragShaderModule, fragShaderCode) != VK_SUCCESS)
+        {
+            std::cout << "Error: failed to create fragment VkShaderModule!" << std::endl;
+            return EXIT_FAILURE;
+        }
 
         VkPipelineShaderStageCreateInfo vertShaderStageCreateInfo{};
         vertShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -623,28 +713,10 @@ int main()
 
     // create VkFramebuffers
     std::vector<VkFramebuffer> swapchainFramebuffers;
+    if (createFramebuffers(swapchainImageViews, renderPass, swapchainExtent, device, swapchainFramebuffers) != VK_SUCCESS)
     {
-        swapchainFramebuffers.resize(swapchainImageViews.size());
-
-        for (size_t i = 0; i < swapchainImageViews.size(); i++)
-        {
-            VkImageView attachments[] = { swapchainImageViews[i] };
-
-            VkFramebufferCreateInfo framebufferCreateInfo{};
-            framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferCreateInfo.renderPass = renderPass;
-            framebufferCreateInfo.attachmentCount = 1;
-            framebufferCreateInfo.pAttachments = attachments;
-            framebufferCreateInfo.width = swapchainExtent.width;
-            framebufferCreateInfo.height = swapchainExtent.height;
-            framebufferCreateInfo.layers = 1;
-
-            if (vkCreateFramebuffer(device, &framebufferCreateInfo, nullptr, &swapchainFramebuffers[i]) != VK_SUCCESS)
-            {
-                std::cout << "Error: failed to create VkFramebuffer!" << std::endl;
-                return EXIT_FAILURE;
-            }
-        }
+        std::cout << "Error: failed to create VkFramebuffers!" << std::endl;
+        return EXIT_FAILURE;
     }
 
     // create VkCommandPool
@@ -666,15 +738,17 @@ int main()
     }
 
     // allocate VkCommandBuffer
-    VkCommandBuffer commandBuffer;
+    std::vector<VkCommandBuffer> commandBuffers;
     {
+        commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
         VkCommandBufferAllocateInfo commandBufferAllocateInfo{};
         commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         commandBufferAllocateInfo.commandPool = commandPool;
         commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        commandBufferAllocateInfo.commandBufferCount = 1;
+        commandBufferAllocateInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers.size());
 
-        if (vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, &commandBuffer) != VK_SUCCESS)
+        if (vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffers.data()) != VK_SUCCESS)
         {
             std::cout << "Error: failed to allocate VkCommandBuffer!" << std::endl;
             return EXIT_FAILURE;
@@ -682,50 +756,73 @@ int main()
     }
 
     // create synchronization objects
-    VkSemaphore imageAvailableSemaphore;
-    VkSemaphore renderFinishedSemaphore;
-    VkFence inFlightFence;
+    std::vector<VkSemaphore> imageAvailableSemaphores;
+    std::vector<VkSemaphore> renderFinishedSemaphores;
+    std::vector<VkFence> inFlightFences;
     {
+        imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
         VkSemaphoreCreateInfo semaphoreCreateInfo{};
         semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-        if (vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS
-            || vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS)
-        {
-            std::cout << "Error: failed to create VkSemaphores!" << std::endl;
-            return EXIT_FAILURE;
-        }
 
         VkFenceCreateInfo fenceCreateInfo{};
         fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-        if (vkCreateFence(device, &fenceCreateInfo, nullptr, &inFlightFence) != VK_SUCCESS)
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            std::cout << "Error: failed to allocate VkCommandBuffer!" << std::endl;
-            return EXIT_FAILURE;
+            if (vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS
+                || vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS)
+            {
+                std::cout << "Error: failed to create VkSemaphores!" << std::endl;
+                return EXIT_FAILURE;
+            }
+            if (vkCreateFence(device, &fenceCreateInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS)
+            {
+                std::cout << "Error: failed to allocate VkCommandBuffer!" << std::endl;
+                return EXIT_FAILURE;
+            }
         }
     }
 
     // main loop
+    uint32_t currentFrame = 0;
     while(!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
         // draw frame
         {
-            vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
-            vkResetFences(device, 1, &inFlightFence);
+            vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
             uint32_t imageIndex;
-            vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+            VkResult result = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
-            vkResetCommandBuffer(commandBuffer, 0);
+            if (result == VK_ERROR_OUT_OF_DATE_KHR)
+            {
+                if (recreateSwapchain(window, device, swapchain, swapchainImageViews, swapchainFramebuffers, physicalDevice, surface, swapchainExtent, renderPass) != VK_SUCCESS)
+                {
+                    std::cout << "Error: failed to recreate swapchain!" << std::endl;
+                    return EXIT_FAILURE;
+                }
+                continue;
+            }
+            else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+            {
+                std::cout << "Error: failed to aquire next swapchain image!" << std::endl;
+                return EXIT_FAILURE;
+            }
+
+            vkResetFences(device, 1, &inFlightFences[currentFrame]);
+
+            vkResetCommandBuffer(commandBuffers[currentFrame], 0);
             
             // record command buffer
             VkCommandBufferBeginInfo commandBufferBeginInfo{};
             commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-            if (vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo) != VK_SUCCESS)
+            if (vkBeginCommandBuffer(commandBuffers[currentFrame], &commandBufferBeginInfo) != VK_SUCCESS)
             {
                 std::cout << "Error: failed to begin command buffer!" << std::endl;
                 return EXIT_FAILURE;
@@ -742,9 +839,9 @@ int main()
             renderPassBeginInfo.clearValueCount = 1;
             renderPassBeginInfo.pClearValues = &clearColor;
 
-            vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBeginRenderPass(commandBuffers[currentFrame], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+                vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
                 VkViewport viewport{};
                 viewport.x = 0.0f;
@@ -753,18 +850,18 @@ int main()
                 viewport.height = static_cast<float>(swapchainExtent.height);
                 viewport.minDepth = 0.0f;
                 viewport.maxDepth = 1.0f;
-                vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+                vkCmdSetViewport(commandBuffers[currentFrame], 0, 1, &viewport);
 
                 VkRect2D scissor{};
                 scissor.offset = {0, 0};
                 scissor.extent = swapchainExtent;
-                vkCmdSetScissor(commandBuffer, 0, 1, &scissor);            
+                vkCmdSetScissor(commandBuffers[currentFrame], 0, 1, &scissor);            
 
-                vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+                vkCmdDraw(commandBuffers[currentFrame], 3, 1, 0, 0);
 
-            vkCmdEndRenderPass(commandBuffer);
+            vkCmdEndRenderPass(commandBuffers[currentFrame]);
 
-            if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
+            if (vkEndCommandBuffer(commandBuffers[currentFrame]) != VK_SUCCESS)
             {
                 std::cout << "Error: failed to begin command buffer!" << std::endl;
                 return EXIT_FAILURE;
@@ -773,19 +870,19 @@ int main()
             VkSubmitInfo submitInfo{};
             submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-            VkSemaphore waitSemaphores[] = { imageAvailableSemaphore };
+            VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
             VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
             submitInfo.waitSemaphoreCount = 1;
             submitInfo.pWaitSemaphores = waitSemaphores;
             submitInfo.pWaitDstStageMask = waitStages;
             submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers = &commandBuffer;
+            submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
 
-            VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
+            VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
             submitInfo.signalSemaphoreCount = 1;
             submitInfo.pSignalSemaphores = signalSemaphores;
 
-            if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFence) != VK_SUCCESS)
+            if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS)
             {
                 std::cout << "Error: failed to submit queue!" << std::endl;
                 return EXIT_FAILURE;
@@ -801,29 +898,40 @@ int main()
             presentInfo.pSwapchains = swapchains;
             presentInfo.pImageIndices = &imageIndex;
 
-            vkQueuePresentKHR(presentQueue, &presentInfo);
+            result = vkQueuePresentKHR(presentQueue, &presentInfo);
+            if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized)
+            {
+                framebufferResized = false;
+                if (recreateSwapchain(window, device, swapchain, swapchainImageViews, swapchainFramebuffers, physicalDevice, surface, swapchainExtent, renderPass) != VK_SUCCESS)
+                {
+                    std::cout << "Error: failed to recreate swapchain!" << std::endl;
+                    return EXIT_FAILURE;
+                }
+            }
+            else if (result != VK_SUCCESS)
+            {
+                std::cout << "Error: failed to present swapchain image!" << std::endl;
+                return EXIT_FAILURE;
+            }
+
+            currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
         }
     }
 
     vkDeviceWaitIdle(device);
 
     // cleanup
-    vkDestroyFence(device, inFlightFence, nullptr);
-    vkDestroySemaphore(device, renderFinishedSemaphore, nullptr);
-    vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
-    vkDestroyCommandPool(device, commandPool, nullptr);
-    for (auto framebuffer: swapchainFramebuffers)
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        vkDestroyFramebuffer(device, framebuffer, nullptr);
+        vkDestroyFence(device, inFlightFences[i], nullptr);
+        vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
+        vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
     }
+    vkDestroyCommandPool(device, commandPool, nullptr);
     vkDestroyPipeline(device, graphicsPipeline, nullptr);
     vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
     vkDestroyRenderPass(device, renderPass, nullptr);
-    for (auto imageView : swapchainImageViews)
-    {
-        vkDestroyImageView(device, imageView, nullptr);
-    }
-    vkDestroySwapchainKHR(device, swapchain, nullptr);
+    cleanupSwapchain(device, swapchain, swapchainImageViews, swapchainFramebuffers);
     vkDestroyDevice(device, nullptr);
     vkDestroySurfaceKHR(instance, surface, nullptr);
     if (enableValidationLayers)
