@@ -2,10 +2,10 @@
 cmake_minimum_required(VERSION 3.21)
 project(SilkEngine VERSION 1.0.0)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(main main.cpp)
+add_executable(main main.cpp Engine.cpp)
 
 # link vcpkg manifest dependencies
 find_package(glfw3 CONFIG REQUIRED)
@@ -15,6 +15,7 @@ find_package(unofficial-shaderc CONFIG REQUIRED)
 
 target_link_libraries(main PRIVATE glfw glm::glm Vulkan::Vulkan)
 
+# shader compilation
 set(GLSLC "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/tools/shaderc/glslc.exe")
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/shaders)
 
