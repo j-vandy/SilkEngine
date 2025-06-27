@@ -1,0 +1,2 @@
+add_executable(ecs_test ecs_test.cpp)
+target_link_libraries(ecs_test PRIVATE silk_engine)
