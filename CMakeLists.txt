@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # create silk_engine library
-add_library(silk_engine STATIC engine/Engine.cpp)
+add_library(silk_engine STATIC engine/Engine.cpp engine/Transform.cpp)
 
 # include paths for engine headers
 target_include_directories(silk_engine PUBLIC engine)

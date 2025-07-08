@@ -1,23 +1,20 @@
 #pragma once
 
+#include "ECS.h"
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-// #define GLM_FORCE_RADIANS
-// #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-// #include <glm/vec4.hpp>
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/mat4x4.hpp>
-// #include <glm/gtc/matrix_transform.hpp>
 
 #include <vector>
 #include <array>
 #include <functional>
 
-#include "ECS.h"
-
 namespace silk
 {
-
     struct UniformBufferObject
     {
         alignas(16) glm::mat4 model;
@@ -29,21 +26,14 @@ namespace silk
 
     struct Camera
     {
-        float fovy;
-        float near;
-        float far;
-    };
-
-    struct Transform
-    {
-        glm::vec3 position;
-        glm::vec4 rotation;
-        glm::vec3 scale;
+        float fovYAxis;
+        glm::mat4 getOrthoMatrix(uint32_t screenWidth, uint32_t screenHeight) const;
+        Camera(float fovy = 1.0f) : fovYAxis(fovy) {}
     };
 
     struct Vertex
     {
-        glm::vec3 position;
+        glm::vec2 position;
         glm::vec3 color;
         static VkVertexInputBindingDescription getBindingDescription();
         static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions();

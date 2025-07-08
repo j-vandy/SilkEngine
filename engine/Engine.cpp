@@ -1,17 +1,21 @@
 #include "Engine.h"
+#include "Transform.h"
 
-// #include <algorithm>
+#include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
-// #include <format>
 #include <fstream>
 #include <iostream>
-// #include <optional>
 #include <set>
-// #include <stdexcept>
-// #include <string>
 
 namespace silk
 {
+    glm::mat4 Camera::getOrthoMatrix(uint32_t screenWidth, uint32_t screenHeight) const
+    {
+        float aspect = static_cast<float>(screenWidth) / screenHeight;
+        float width = fovYAxis * aspect;
+        return glm::ortho(-width/2.0f, width/2.0f, -fovYAxis/2.0f, fovYAxis/2.0f, -1.0f, 1.0f);
+    }
+
     VkVertexInputBindingDescription Vertex::getBindingDescription()
     {
         VkVertexInputBindingDescription bindingDescription{};
@@ -27,7 +31,7 @@ namespace silk
 
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
-        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
         attributeDescriptions[0].offset = offsetof(Vertex, position);
 
         attributeDescriptions[1].binding = 0;
