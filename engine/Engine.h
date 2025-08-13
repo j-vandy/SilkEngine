@@ -15,14 +15,18 @@
 
 namespace silk
 {
-    struct UniformBufferObject
+    struct Tint
     {
-        alignas(16) glm::mat4 model;
+        glm::vec4 color;
+    };
+
+    struct Quad{};
+
+    struct CameraUBO
+    {
         alignas(16) glm::mat4 view;
         alignas(16) glm::mat4 proj;
     };
-
-    struct Renderable{};
 
     struct Camera
     {
@@ -31,31 +35,35 @@ namespace silk
         Camera(float fovy = 1.0f) : fovYAxis(fovy) {}
     };
 
+    struct InstanceData
+    {
+        glm::mat4 model;
+        glm::vec4 tint;
+        static VkVertexInputBindingDescription getBindingDescription(uint32_t binding = 0);
+        static std::array<VkVertexInputAttributeDescription, 5> getAttributeDescriptions(uint32_t binding = 0, uint32_t location = 0);
+    };
+
     struct Vertex
     {
         glm::vec2 position;
-        glm::vec3 color;
-        static VkVertexInputBindingDescription getBindingDescription();
-        static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions();
+        static VkVertexInputBindingDescription getBindingDescription(uint32_t binding = 0);
+        static std::array<VkVertexInputAttributeDescription, 1> getAttributeDescriptions(uint32_t binding = 0, uint32_t location = 0);
     };
 
-    struct Mesh
-    {
-        std::vector<Vertex> vertices;
-        std::vector<uint16_t> indices;
-    };
-   
     class Engine
     {
     public:
         std::vector<std::function<void(float)>> updateCallbacks;
         Engine(int width, int height, const char* applicationName);
         ~Engine();
-        void loadScene(Scene& scene);
         void run();
         void shouldResizeFramebuffer();
-        void memcpyUBO(const UniformBufferObject& ubo);
-        const VkExtent2D& getSwapchainExtent();
+        void memcpyCameraUBO(const CameraUBO& ubo);
+        void updateInstanceBuffer(const std::vector<InstanceData>& instances);
+        const VkExtent2D& getSwapchainExtent() const;
+        void getCursorWorldSpace(Scene& scene, const Entity& cam, float* x, float* y) const;
+        GLFWkeyfun setKeyCallback(GLFWkeyfun callback);
+        GLFWmousebuttonfun setMouseButtonCallback(GLFWmousebuttonfun callback);
     private:
         const bool ENABLE_VALIDATION_LAYERS = true;
         const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -63,8 +71,8 @@ namespace silk
         const std::vector<const char*> VALIDATION_LAYERS = { "VK_LAYER_KHRONOS_validation" };
         const std::vector<const char*> DEVICE_EXTENSIONS = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
         bool framebufferResized = true;
-        bool sceneLoaded = false;
         uint32_t currentFrame = 0;
+        uint32_t maxInstances = 100;
         GLFWwindow* window;
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
@@ -85,12 +93,16 @@ namespace silk
         VkCommandPool commandPool;
         VkBuffer vertexBuffer;
         VkDeviceMemory vertexBufferMemory;
+        std::vector<uint32_t> instanceCounts;
+        std::vector<VkBuffer> instanceBuffers;
+        std::vector<VkDeviceMemory> instanceBuffersMemory;
+        std::vector<void*> instanceBuffersMapped;
         uint32_t indexCount;
         VkBuffer indexBuffer;
         VkDeviceMemory indexBufferMemory;
-        std::vector<void*> uniformBuffersMapped;
         std::vector<VkBuffer> uniformBuffers;
         std::vector<VkDeviceMemory> uniformBuffersMemory;
+        std::vector<void*> uniformBuffersMapped;
         VkDescriptorPool descriptorPool;
         std::vector<VkDescriptorSet> descriptorSets;
         std::vector<VkCommandBuffer> commandBuffers;
@@ -101,10 +113,11 @@ namespace silk
         VkResult createImageViews(const VkFormat swapchainImageFormat);
         VkResult createShaderModule(VkShaderModule& shaderModule, const std::vector<char>& code);
         VkResult createFramebuffers();
+        VkResult createInstanceBuffers();
         VkResult createBuffer(const VkDeviceSize size, const VkBufferUsageFlags usageFlags, const VkMemoryPropertyFlags propertyFlags, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
         VkResult copyBuffer(const VkBuffer srcBuffer, VkBuffer& dstBuffer, const VkDeviceSize size);
         VkResult recreateSwapchain();
         void cleanupSwapchain();
-        void cleanupScene();
+        void cleanupInstanceBuffers();
     };
 }

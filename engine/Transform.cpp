@@ -45,6 +45,6 @@ namespace silk
             0.0f, 0.0f, 1.0f, 0.0f,
             0.0f, 0.0f, 0.0f, 1.0f
         );
-        mat = glm::scale(glm::mat4(1.0f), glm::vec3(s.x, s.y, 1.0f)) * rotMatrix * glm::translate(glm::mat4(1.0f), glm::vec3(pos.x, pos.y, 0.0f));
+        mat = glm::translate(glm::mat4(1.0f), glm::vec3(pos.x, pos.y, 0.0f)) * rotMatrix * glm::scale(glm::mat4(1.0f), glm::vec3(s.x, s.y, 1.0f));
     }
 }

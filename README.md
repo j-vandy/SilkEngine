@@ -49,6 +49,6 @@ Download and [install Git](https://git-scm.com/downloads).
 After completing the steps above, you can build the project with:
 
 ```bash
-cmake --preset default
-cmake --build build --preset default
+cmake --preset debug
+cmake --build build --preset debug
 ```

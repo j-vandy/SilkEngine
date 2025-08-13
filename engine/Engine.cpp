@@ -9,40 +9,77 @@
 
 namespace silk
 {
+    const std::vector<silk::Vertex> QUAD_VERTICES = {
+        {{-0.5f, -0.5f}},
+        {{0.5f, -0.5f}},
+        {{0.5f, 0.5f}},
+        {{-0.5f, 0.5f}}
+    };
+
+    const std::vector<uint16_t> QUAD_INDICES = {
+        0, 1, 2, 2, 3, 0
+    };
+
     glm::mat4 Camera::getOrthoMatrix(uint32_t screenWidth, uint32_t screenHeight) const
     {
         float aspect = static_cast<float>(screenWidth) / screenHeight;
         float width = fovYAxis * aspect;
-        return glm::ortho(-width/2.0f, width/2.0f, -fovYAxis/2.0f, fovYAxis/2.0f, -1.0f, 1.0f);
+        const float Z_NEAR = -1.0f;
+        const float Z_FAR = 1.0f;
+        return glm::ortho(-width/2.0f, width/2.0f, -fovYAxis/2.0f, fovYAxis/2.0f, Z_NEAR, Z_FAR);
     }
 
-    VkVertexInputBindingDescription Vertex::getBindingDescription()
+    VkVertexInputBindingDescription InstanceData::getBindingDescription(uint32_t binding)
     {
         VkVertexInputBindingDescription bindingDescription{};
-        bindingDescription.binding = 0;
+        bindingDescription.binding = binding;
+        bindingDescription.stride = sizeof(InstanceData);
+        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+        return bindingDescription;
+    }
+
+    std::array<VkVertexInputAttributeDescription, 5> InstanceData::getAttributeDescriptions(uint32_t binding, uint32_t location)
+    {
+        std::array<VkVertexInputAttributeDescription, 5> attributeDescriptions;
+
+        for (size_t i = 0; i < 4; i++)
+        {
+            attributeDescriptions[i].location = location + i;
+            attributeDescriptions[i].binding = binding;
+            attributeDescriptions[i].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+            attributeDescriptions[i].offset = offsetof(InstanceData, model) + sizeof(glm::vec4) * i;
+        }
+
+        attributeDescriptions[4].location = location + 4;
+        attributeDescriptions[4].binding = binding;
+        attributeDescriptions[4].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+        attributeDescriptions[4].offset = offsetof(InstanceData, tint);
+
+        return attributeDescriptions;
+    }
+
+    VkVertexInputBindingDescription Vertex::getBindingDescription(uint32_t binding)
+    {
+        VkVertexInputBindingDescription bindingDescription{};
+        bindingDescription.binding = binding;
         bindingDescription.stride = sizeof(Vertex);
         bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
         return bindingDescription;
     }
 
-    std::array<VkVertexInputAttributeDescription, 2> Vertex::getAttributeDescriptions()
+    std::array<VkVertexInputAttributeDescription, 1> Vertex::getAttributeDescriptions(uint32_t binding, uint32_t location)
     {
-        std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions;
+        std::array<VkVertexInputAttributeDescription, 1> attributeDescriptions;
 
-        attributeDescriptions[0].binding = 0;
-        attributeDescriptions[0].location = 0;
+        attributeDescriptions[0].location = location;
+        attributeDescriptions[0].binding = binding;
         attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
         attributeDescriptions[0].offset = offsetof(Vertex, position);
-
-        attributeDescriptions[1].binding = 0;
-        attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex, color);
 
         return attributeDescriptions;
     }    
 
-    void framebufferResizeCallback(GLFWwindow* window, int width, int height)
+    void framebufferResizeCallback(GLFWwindow* window, int width __attribute__((unused)), int height __attribute__((unused)))
     {
         Engine* engine = static_cast<Engine*>(glfwGetWindowUserPointer(window));
         if (!engine)
@@ -52,7 +89,7 @@ namespace silk
         engine->shouldResizeFramebuffer();
     }
 
-    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
+    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity __attribute__((unused)), VkDebugUtilsMessageTypeFlagsEXT messageType __attribute__((unused)), const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData __attribute__((unused)))
     {
         std::cout << "Validation Layer: " << pCallbackData->pMessage << std::endl;
         return VK_FALSE;
@@ -405,12 +442,26 @@ namespace silk
             VkPipelineVertexInputStateCreateInfo vertexInputCreateInfo{};
             vertexInputCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-            auto vertexBindingDescription = Vertex::getBindingDescription();
-            auto vertexAttributeDescriptions = Vertex::getAttributeDescriptions();
+            std::vector<VkVertexInputBindingDescription> vertexBindingDescriptions;
+            vertexBindingDescriptions.push_back(Vertex::getBindingDescription());
 
-            vertexInputCreateInfo.vertexBindingDescriptionCount = 1;
+            uint32_t instanceBinding = 1;
+            uint32_t instanceLocation = 1;
+            vertexBindingDescriptions.push_back(InstanceData::getBindingDescription(instanceBinding));
+
+            std::vector<VkVertexInputAttributeDescription> vertexAttributeDescriptions;
+            for (auto vertexAttributeDescription : Vertex::getAttributeDescriptions())
+            {
+                vertexAttributeDescriptions.push_back(vertexAttributeDescription);
+            }
+            for (auto instanceAttributeDescription : InstanceData::getAttributeDescriptions(instanceBinding, instanceLocation))
+            {
+                vertexAttributeDescriptions.push_back(instanceAttributeDescription);
+            }
+
+            vertexInputCreateInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(vertexBindingDescriptions.size());
             vertexInputCreateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexAttributeDescriptions.size());
-            vertexInputCreateInfo.pVertexBindingDescriptions = &vertexBindingDescription;
+            vertexInputCreateInfo.pVertexBindingDescriptions = vertexBindingDescriptions.data();
             vertexInputCreateInfo.pVertexAttributeDescriptions = vertexAttributeDescriptions.data();
 
             VkPipelineInputAssemblyStateCreateInfo inputAssemblyCreateInfo{};
@@ -429,7 +480,8 @@ namespace silk
             rasterizationCreateInfo.rasterizerDiscardEnable = VK_FALSE;
             rasterizationCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
             rasterizationCreateInfo.lineWidth = 1.0f;
-            rasterizationCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+            // TODO: rasterizationCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+            rasterizationCreateInfo.cullMode = VK_CULL_MODE_NONE;
             rasterizationCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
             rasterizationCreateInfo.depthBiasEnable = VK_FALSE;
 
@@ -517,106 +569,9 @@ namespace silk
             }
         }
 
-        // allocate VkCommandBuffer
-        {
-            commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-
-            VkCommandBufferAllocateInfo commandBufferAllocateInfo{};
-            commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-            commandBufferAllocateInfo.commandPool = commandPool;
-            commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-            commandBufferAllocateInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers.size());
-
-            if (vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffers.data()) != VK_SUCCESS)
-            {
-                std::runtime_error("Error: failed to allocate VkCommandBuffer!");
-            }
-        }
-
-        // create synchronization objects
-        {
-            imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-            renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-            inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-
-            VkSemaphoreCreateInfo semaphoreCreateInfo{};
-            semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-            VkFenceCreateInfo fenceCreateInfo{};
-            fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-            fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-            {
-                if (vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS
-                    || vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS)
-                {
-                    std::runtime_error("Error: failed to create VkSemaphores!");
-                }
-                if (vkCreateFence(device, &fenceCreateInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS)
-                {
-                    std::runtime_error("Error: failed to create VkFence!");
-                }
-            }
-        }
-    }
-
-    Engine::~Engine()
-    {
-        vkDeviceWaitIdle(device);
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-        {
-            vkDestroyFence(device, inFlightFences[i], nullptr);
-            vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
-            vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
-        }
-        if (sceneLoaded)
-        {
-            cleanupScene();
-        }
-        vkDestroyCommandPool(device, commandPool, nullptr);
-        vkDestroyPipeline(device, graphicsPipeline, nullptr);
-        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-        vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
-        vkDestroyRenderPass(device, renderPass, nullptr);
-        cleanupSwapchain();
-        vkDestroyDevice(device, nullptr);
-        vkDestroySurfaceKHR(instance, surface, nullptr);
-        if (ENABLE_VALIDATION_LAYERS)
-        {
-            auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-            if (func != nullptr)
-            {
-                func(instance, debugMessenger, nullptr);
-            }
-        }
-        vkDestroyInstance(instance, nullptr);
-        glfwDestroyWindow(window);
-        glfwTerminate();
-    }
-
-    void Engine::loadScene(Scene& scene)
-    {
-        if (sceneLoaded)
-        {
-            vkDeviceWaitIdle(device);
-            cleanupScene();
-        }
-        sceneLoaded = true;
-
-        std::vector<Vertex> vertices;
-        std::vector<uint16_t> indices;
-        std::vector<Entity> entities = scene.query<Renderable, Mesh, Transform>();
-        for (Entity e : entities)
-        {
-            Mesh& mesh = scene.getComponent<Mesh>(e);
-            vertices = mesh.vertices;
-            indices = mesh.indices;
-        }
-
         // create (vertex) VkBuffer
         {
-            VkDeviceSize vertexBufferSize = sizeof(vertices[0]) * vertices.size();
+            VkDeviceSize vertexBufferSize = sizeof(QUAD_VERTICES[0]) * QUAD_VERTICES.size();
 
             VkBuffer stagingBuffer;
             VkDeviceMemory stagingBufferMemory;
@@ -627,7 +582,7 @@ namespace silk
 
             void* data;
             vkMapMemory(device, stagingBufferMemory, 0, vertexBufferSize, 0, &data);
-                memcpy(data, vertices.data(), static_cast<size_t>(vertexBufferSize));
+                memcpy(data, QUAD_VERTICES.data(), static_cast<size_t>(vertexBufferSize));
             vkUnmapMemory(device, stagingBufferMemory);
 
             if (createBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory) != VK_SUCCESS)
@@ -644,10 +599,21 @@ namespace silk
             vkFreeMemory(device, stagingBufferMemory, nullptr);
         }
 
+        // create (instance) VkBuffer
+        instanceCounts.resize(MAX_FRAMES_IN_FLIGHT);
+        instanceBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        instanceBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+        instanceBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+        if (createInstanceBuffers() != VK_SUCCESS)
+        {
+            std::runtime_error("Error: failed to create instance buffers!");
+        }
+
         // create (index) VkBuffer
         {
-            indexCount = indices.size();
-            VkDeviceSize indexBufferSize = sizeof(indices[0]) * indices.size(); 
+            indexCount = QUAD_INDICES.size();
+            VkDeviceSize indexBufferSize = sizeof(QUAD_INDICES[0]) * QUAD_INDICES.size(); 
 
             VkBuffer stagingBuffer;
             VkDeviceMemory stagingBufferMemory;
@@ -658,7 +624,7 @@ namespace silk
 
             void* data;
             vkMapMemory(device, stagingBufferMemory, 0, indexBufferSize, 0, &data);
-                memcpy(data, indices.data(), static_cast<size_t>(indexBufferSize));
+                memcpy(data, QUAD_INDICES.data(), static_cast<size_t>(indexBufferSize));
             vkUnmapMemory(device, stagingBufferMemory);
 
             if (createBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory) != VK_SUCCESS)
@@ -677,16 +643,21 @@ namespace silk
 
         // create (uniform) VkBuffer
         {
-            VkDeviceSize bufferSize = sizeof(UniformBufferObject);
-
             uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
             uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
             uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
-            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+            VkDeviceSize bufferSize = sizeof(CameraUBO);
+            for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
             {
-                createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]);
-                vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
+                if (createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]) != VK_SUCCESS)
+                {
+                    std::runtime_error("Error: failed to create uniform buffers!");
+                }
+                if (vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]) != VK_SUCCESS)
+                {
+                    std::runtime_error("Error: failed to map uniform buffers memory!");
+                }
             }
         }
 
@@ -723,12 +694,12 @@ namespace silk
                 std::runtime_error("Error: failed to create VkDescriptorSets!");
             }
 
-            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+            for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
             {
                 VkDescriptorBufferInfo descriptorBufferInfo{};
                 descriptorBufferInfo.buffer = uniformBuffers[i];
                 descriptorBufferInfo.offset = 0;
-                descriptorBufferInfo.range = sizeof(UniformBufferObject);
+                descriptorBufferInfo.range = sizeof(CameraUBO);
 
                 VkWriteDescriptorSet writeDescriptorSet{};
                 writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -742,11 +713,94 @@ namespace silk
                 vkUpdateDescriptorSets(device, 1, &writeDescriptorSet, 0, nullptr);
             }
         }
+
+        // allocate VkCommandBuffer
+        {
+            commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
+            VkCommandBufferAllocateInfo commandBufferAllocateInfo{};
+            commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            commandBufferAllocateInfo.commandPool = commandPool;
+            commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            commandBufferAllocateInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers.size());
+
+            if (vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffers.data()) != VK_SUCCESS)
+            {
+                std::runtime_error("Error: failed to allocate VkCommandBuffer!");
+            }
+        }
+
+        // create synchronization objects
+        {
+            imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+            renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+            inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
+            VkSemaphoreCreateInfo semaphoreCreateInfo{};
+            semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+            VkFenceCreateInfo fenceCreateInfo{};
+            fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+            for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
+            {
+                if (vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS
+                    || vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS)
+                {
+                    std::runtime_error("Error: failed to create VkSemaphores!");
+                }
+                if (vkCreateFence(device, &fenceCreateInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS)
+                {
+                    std::runtime_error("Error: failed to create VkFence!");
+                }
+            }
+        }
+    }
+
+    Engine::~Engine()
+    {
+        vkDeviceWaitIdle(device);
+        for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
+        {
+            vkDestroyFence(device, inFlightFences[i], nullptr);
+            vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
+            vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
+        }
+        vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+        for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
+        {
+            vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
+            vkDestroyBuffer(device, uniformBuffers[i], nullptr);
+        }
+        vkFreeMemory(device, indexBufferMemory, nullptr);
+        vkDestroyBuffer(device, indexBuffer, nullptr);
+        cleanupInstanceBuffers();
+        vkFreeMemory(device, vertexBufferMemory, nullptr);
+        vkDestroyBuffer(device, vertexBuffer, nullptr);
+        vkDestroyCommandPool(device, commandPool, nullptr);
+        vkDestroyPipeline(device, graphicsPipeline, nullptr);
+        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+        vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+        vkDestroyRenderPass(device, renderPass, nullptr);
+        cleanupSwapchain();
+        vkDestroyDevice(device, nullptr);
+        vkDestroySurfaceKHR(instance, surface, nullptr);
+        if (ENABLE_VALIDATION_LAYERS)
+        {
+            auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+            if (func != nullptr)
+            {
+                func(instance, debugMessenger, nullptr);
+            }
+        }
+        vkDestroyInstance(instance, nullptr);
+        glfwDestroyWindow(window);
+        glfwTerminate();
     }
 
     void Engine::run()
     {
-        float duration = 0;
         auto previousTime = std::chrono::high_resolution_clock::now();
 
         while(!glfwWindowShouldClose(window))
@@ -756,8 +810,8 @@ namespace silk
             auto currentTime = std::chrono::high_resolution_clock::now();
             float deltaTime = std::chrono::duration<float>(currentTime - previousTime).count();
             previousTime = currentTime;
-            duration += deltaTime;
 
+            // TODO: move this update callback once we have a frame?
             for (std::function<void(float)> fn : updateCallbacks)
             {
                 fn(deltaTime);
@@ -767,11 +821,6 @@ namespace silk
 
             // draw frame
             {
-                if (!sceneLoaded)
-                {
-                    continue;
-                }
-
                 vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
                 uint32_t imageIndex;
@@ -832,15 +881,15 @@ namespace silk
                     scissor.extent = swapchainExtent;
                     vkCmdSetScissor(commandBuffers[currentFrame], 0, 1, &scissor);
 
-                    VkBuffer vertexBuffers[] = { vertexBuffer };
-                    VkDeviceSize offsets[] = { 0 };
-                    vkCmdBindVertexBuffers(commandBuffers[currentFrame], 0, 1, vertexBuffers, offsets);
+                    VkBuffer vertexBuffers[] = { vertexBuffer, instanceBuffers[currentFrame] };
+                    VkDeviceSize offsets[] = { 0, 0 };
+                    vkCmdBindVertexBuffers(commandBuffers[currentFrame], 0, 2, vertexBuffers, offsets);
 
                     vkCmdBindIndexBuffer(commandBuffers[currentFrame], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
                     vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
-                    vkCmdDrawIndexed(commandBuffers[currentFrame], indexCount, 1, 0, 0, 0);
+                    vkCmdDrawIndexed(commandBuffers[currentFrame], indexCount, instanceCounts[currentFrame], 0, 0, 0);
 
                 vkCmdEndRenderPass(commandBuffers[currentFrame]);
 
@@ -898,16 +947,66 @@ namespace silk
         }
     }
 
-    void Engine::shouldResizeFramebuffer() { framebufferResized = true; }
+    void Engine::shouldResizeFramebuffer()
+    {
+        framebufferResized = true;
+    }
 
-    void Engine::memcpyUBO(const UniformBufferObject& ubo)
+    void Engine::memcpyCameraUBO(const CameraUBO& ubo)
     {
         memcpy(uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
     }
 
-    const VkExtent2D& Engine::getSwapchainExtent() 
+    void Engine::updateInstanceBuffer(const std::vector<InstanceData>& instances)
+    {
+        size_t instancesSize = instances.size();
+        if (instancesSize > maxInstances)
+        {
+            std::cout << "RECREATE INSTANCE BUFFER!" << std::endl;
+            vkDeviceWaitIdle(device);
+            cleanupInstanceBuffers();
+
+            maxInstances = instancesSize * 2;
+            if (createInstanceBuffers() != VK_SUCCESS)
+            {
+                std::runtime_error("Error: failed to create instance buffers!");
+            }
+        }
+
+        instanceCounts[currentFrame] = instancesSize;
+        memcpy(instanceBuffersMapped[currentFrame], instances.data(), instancesSize * sizeof(instances[0]));
+    }
+
+    const VkExtent2D& Engine::getSwapchainExtent() const
     {
         return swapchainExtent;
+    }
+
+    void Engine::getCursorWorldSpace(silk::Scene& scene, const silk::Entity& cam, float* x, float* y) const
+    {
+        double screenPosX, screenPosY;
+        glfwGetCursorPos(window, &screenPosX, &screenPosY);
+        glm::vec4 screenSpace = glm::vec4(static_cast<float>(screenPosX), static_cast<float>(screenPosY), 0.0f, 1.0f);
+
+        glm::mat4 invViewport = glm::scale(glm::mat4(1.0f), glm::vec3(2/static_cast<float>(swapchainExtent.width), -2/static_cast<float>(swapchainExtent.height),1.0f));
+        invViewport[3] = glm::vec4(-1.0f, 1.0f, 0.0f, 1.0f);
+
+        glm::mat4 invProj = glm::inverse(scene.getComponent<Camera>(cam).getOrthoMatrix(swapchainExtent.width, swapchainExtent.height));
+        glm::mat4 invView = scene.getComponent<silk::Transform>(cam).getMatrix();
+        glm::vec4 worldSpace = invView * invProj * invViewport * screenSpace;
+
+        *x = worldSpace.x;
+        *y = worldSpace.y;
+    }
+
+    GLFWkeyfun Engine::setKeyCallback(GLFWkeyfun callback)
+    {
+        return glfwSetKeyCallback(window, callback);
+    }
+
+    GLFWmousebuttonfun Engine::setMouseButtonCallback(GLFWmousebuttonfun callback)
+    {
+        return glfwSetMouseButtonCallback(window, callback);
     }
 
     VkResult Engine::createSwapchain(VkFormat& swapchainImageFormat)
@@ -1076,6 +1175,25 @@ namespace silk
         return VK_SUCCESS;
     }
 
+    VkResult Engine::createInstanceBuffers()
+    {
+        VkDeviceSize instanceBufferSize = sizeof(InstanceData) * maxInstances;
+        for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
+        {
+            VkResult result = createBuffer(instanceBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, instanceBuffers[i], instanceBuffersMemory[i]);
+            if (result != VK_SUCCESS)
+            {
+                return result;
+            }
+            result = vkMapMemory(device, instanceBuffersMemory[i], 0, instanceBufferSize, 0, &instanceBuffersMapped[i]);
+            if (result != VK_SUCCESS)
+            {
+                return result;
+            }
+        }
+        return VK_SUCCESS;
+    }
+
     VkResult Engine::createBuffer(const VkDeviceSize size, const VkBufferUsageFlags usageFlags, const VkMemoryPropertyFlags propertyFlags, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
     {
         VkBufferCreateInfo bufferCreateInfo{};
@@ -1187,8 +1305,8 @@ namespace silk
         glfwGetFramebufferSize(window, &width, &height);
         while (width == 0 || height == 0)
         {
-            glfwGetFramebufferSize(window, &width, &height);
             glfwWaitEvents();
+            glfwGetFramebufferSize(window, &width, &height);
         }
 
         vkDeviceWaitIdle(device);
@@ -1218,17 +1336,12 @@ namespace silk
         vkDestroySwapchainKHR(device, swapchain, nullptr);
     }
 
-    void Engine::cleanupScene()
+    void Engine::cleanupInstanceBuffers()
     {
-        vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
         {
-            vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
-            vkDestroyBuffer(device, uniformBuffers[i], nullptr);
+            vkFreeMemory(device, instanceBuffersMemory[i], nullptr);
+            vkDestroyBuffer(device, instanceBuffers[i], nullptr);
         }
-        vkFreeMemory(device, indexBufferMemory, nullptr);
-        vkDestroyBuffer(device, indexBuffer, nullptr);
-        vkFreeMemory(device, vertexBufferMemory, nullptr);
-        vkDestroyBuffer(device, vertexBuffer, nullptr);
     }
 }
