@@ -15,6 +15,26 @@
 
 namespace silk
 {
+    void validateVkResult(VkResult result, const char* msg);
+
+    VkSurfaceFormatKHR getPhysicalDeviceSurfaceFormat(const VkPhysicalDevice& physicalDevice, const VkSurfaceKHR& surface);
+
+    class SwapchainContext
+    {
+    public:
+        SwapchainContext(GLFWwindow* window, const VkPhysicalDevice& physicalDevice, uint32_t graphicsQueueFamilyIndex, uint32_t presentQueueFamilyIndex, const VkSurfaceKHR& surface, const VkDevice& device, const VkRenderPass& renderPass);
+        ~SwapchainContext();
+        const VkExtent2D& getExtent() const;
+        const VkSwapchainKHR& getSwapchain() const;
+        const std::vector<VkFramebuffer>& getFramebuffers() const;
+    private:
+        VkDevice device;
+        VkExtent2D extent;
+        VkSwapchainKHR swapchain;
+        std::vector<VkImageView> imageViews;
+        std::vector<VkFramebuffer> framebuffers;
+    };
+
     struct Tint
     {
         glm::vec4 color;
