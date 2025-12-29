@@ -168,8 +168,6 @@ namespace silk
                 validateVkResult(vkCreateFramebuffer(device, &framebufferCreateInfo, nullptr, &framebuffers[i]), "Error: failed to create VkFramebuffers");
             }
         }
-
-        std::cout << "create SwapchainContext" << "\n";
     }
 
     SwapchainContext::~SwapchainContext()
@@ -190,8 +188,6 @@ namespace silk
 
         // destroy VkSwapchainKHR
         vkDestroySwapchainKHR(device, swapchain, nullptr);
-
-        std::cout << "destroy SwapchainContext" << "\n";
     }
 
     const VkExtent2D& SwapchainContext::getExtent() const { return extent; }

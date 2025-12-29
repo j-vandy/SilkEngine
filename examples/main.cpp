@@ -280,14 +280,19 @@ VkResult copyBuffer(const VkDevice& device, const VkQueue& graphicsQueue, const 
 bool framebufferResized = false;
 void framebufferResizeCallback(GLFWwindow* window __attribute__((unused)), int width __attribute__((unused)), int height __attribute__((unused)))
 {
-    std::cout << "FRAMEBUFFER RESIZED!" << "\n";
     framebufferResized = true;
+}
+
+void recreateSwapchainContext(GLFWwindow* window, const VkPhysicalDevice& physicalDevice, uint32_t graphicsQueueFamilyIndex, uint32_t presentQueueFamilyIndex, const VkSurfaceKHR& surface, const VkDevice& device, const VkRenderPass& renderPass, std::unique_ptr<silk::SwapchainContext>& swapchainContext)
+{
+    swapchainContext.reset();
+    swapchainContext = std::make_unique<silk::SwapchainContext>(window, physicalDevice, graphicsQueueFamilyIndex, presentQueueFamilyIndex, surface, device, renderPass);
 }
 
 // TODO
 // Only create a function or possibly a data structure whenever it makes sense (i.e., code duplication or reconstruction)
 // COMMON CASES OF RECONSTRUCTION:
-// - Screen resizing
+// - Screen minimization!
 // - Creating different kinds of buffers
 //      - Setting buffer/shader uniform values
 // - Stanford Rabbit Viewer
@@ -568,7 +573,7 @@ int main()
     }
 
     // create SwapchainContext
-    silk::SwapchainContext swapchainContext(window, physicalDevice, graphicsQueueFamilyIndex, presentQueueFamilyIndex, surface, device, renderPass);
+    std::unique_ptr<silk::SwapchainContext> swapchainContext = std::make_unique<silk::SwapchainContext>(window, physicalDevice, graphicsQueueFamilyIndex, presentQueueFamilyIndex, surface, device, renderPass);
 
     // create VkDescriptorSetLayout
     VkDescriptorSetLayout descriptorSetLayout;
@@ -940,18 +945,14 @@ int main()
                 vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
                 uint32_t imageIndex;
-                VkResult result = vkAcquireNextImageKHR(device, swapchainContext.getSwapchain(), UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+                VkResult result = vkAcquireNextImageKHR(device, swapchainContext->getSwapchain(), UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
-                // if (result == VK_ERROR_OUT_OF_DATE_KHR)
-                // {
-                //     if (recreateSwapchain() != VK_SUCCESS)
-                //     {
-                //         throw std::runtime_error("Error: failed to recreate swapchain!");
-                //     }
-                //     continue;
-                // }
-                // else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
-                if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+                if (result == VK_ERROR_OUT_OF_DATE_KHR)
+                {
+                    recreateSwapchainContext(window, physicalDevice, graphicsQueueFamilyIndex, presentQueueFamilyIndex, surface, device, renderPass, swapchainContext);
+                    continue;
+                }
+                else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
                 {
                     throw std::runtime_error("Error: failed to aquire next swapchain image!");
                 }
@@ -964,17 +965,14 @@ int main()
                 VkCommandBufferBeginInfo commandBufferBeginInfo{};
                 commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-                if (vkBeginCommandBuffer(commandBuffers[currentFrame], &commandBufferBeginInfo) != VK_SUCCESS)
-                {
-                    throw std::runtime_error("Error: failed to begin command buffer!");
-                }
+                silk::validateVkResult(vkBeginCommandBuffer(commandBuffers[currentFrame], &commandBufferBeginInfo), "Error: failed to begin command buffer!");
 
                 VkRenderPassBeginInfo renderPassBeginInfo{};
                 renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
                 renderPassBeginInfo.renderPass = renderPass;
-                renderPassBeginInfo.framebuffer = swapchainContext.getFramebuffers()[imageIndex];
+                renderPassBeginInfo.framebuffer = swapchainContext->getFramebuffers()[imageIndex];
                 renderPassBeginInfo.renderArea.offset = {0, 0};
-                renderPassBeginInfo.renderArea.extent = swapchainContext.getExtent();
+                renderPassBeginInfo.renderArea.extent = swapchainContext->getExtent();
 
                 VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
                 renderPassBeginInfo.clearValueCount = 1;
@@ -987,15 +985,15 @@ int main()
                     VkViewport viewport{};
                     viewport.x = 0.0f;
                     viewport.y = 0.0f;
-                    viewport.width = static_cast<float>(swapchainContext.getExtent().width);
-                    viewport.height = static_cast<float>(swapchainContext.getExtent().height);
+                    viewport.width = static_cast<float>(swapchainContext->getExtent().width);
+                    viewport.height = static_cast<float>(swapchainContext->getExtent().height);
                     viewport.minDepth = 0.0f;
                     viewport.maxDepth = 1.0f;
                     vkCmdSetViewport(commandBuffers[currentFrame], 0, 1, &viewport);
 
                     VkRect2D scissor{};
                     scissor.offset = {0, 0};
-                    scissor.extent = swapchainContext.getExtent();
+                    scissor.extent = swapchainContext->getExtent();
                     vkCmdSetScissor(commandBuffers[currentFrame], 0, 1, &scissor);
 
                     VkBuffer vertexBuffers[] = { vertexBuffer, instanceBuffers[currentFrame] };
@@ -1010,10 +1008,7 @@ int main()
 
                 vkCmdEndRenderPass(commandBuffers[currentFrame]);
 
-                if (vkEndCommandBuffer(commandBuffers[currentFrame]) != VK_SUCCESS)
-                {
-                    std::runtime_error("Error: failed to begin command buffer!");
-                }
+                silk::validateVkResult(vkEndCommandBuffer(commandBuffers[currentFrame]), "Error: failed to begin command buffer!");
 
                 VkSubmitInfo submitInfo{};
                 submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1037,22 +1032,18 @@ int main()
                 presentInfo.waitSemaphoreCount = 1;
                 presentInfo.pWaitSemaphores = signalSemaphores;
 
-                VkSwapchainKHR swapchains[] = { swapchainContext.getSwapchain() };
+                VkSwapchainKHR swapchains[] = { swapchainContext->getSwapchain() };
                 presentInfo.swapchainCount = 1;
                 presentInfo.pSwapchains = swapchains;
                 presentInfo.pImageIndices = &imageIndex;
 
                 result = vkQueuePresentKHR(presentQueue, &presentInfo);
-                // if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized)
-                // {
-                //     framebufferResized = false;
-                //     if (recreateSwapchain() != VK_SUCCESS)
-                //     {
-                //         throw std::runtime_error("Error: failed to recreate swapchain!");
-                //     }
-                // }
-                // else if (result != VK_SUCCESS)
-                if (result != VK_SUCCESS)
+                if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized)
+                {
+                    framebufferResized = false;
+                    recreateSwapchainContext(window, physicalDevice, graphicsQueueFamilyIndex, presentQueueFamilyIndex, surface, device, renderPass, swapchainContext);
+                }
+                else if (result != VK_SUCCESS)
                 {
                     throw std::runtime_error("Error: failed to present swapchain image!");
                 }
@@ -1111,7 +1102,7 @@ int main()
 
     // destroy SwapchainContext
     // TODO
-    swapchainContext.~SwapchainContext();
+    swapchainContext.reset();
 
     // destroy renderPass
     vkDestroyRenderPass(device, renderPass, nullptr);
