@@ -285,6 +285,14 @@ void framebufferResizeCallback(GLFWwindow* window __attribute__((unused)), int w
 
 void recreateSwapchainContext(GLFWwindow* window, const VkPhysicalDevice& physicalDevice, uint32_t graphicsQueueFamilyIndex, uint32_t presentQueueFamilyIndex, const VkSurfaceKHR& surface, const VkDevice& device, const VkRenderPass& renderPass, std::unique_ptr<silk::SwapchainContext>& swapchainContext)
 {
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(window, &width, &height);
+    while (width == 0 || height == 0)
+    {
+        glfwGetFramebufferSize(window, &width, &height);
+        glfwWaitEvents();
+    }
+
     swapchainContext.reset();
     swapchainContext = std::make_unique<silk::SwapchainContext>(window, physicalDevice, graphicsQueueFamilyIndex, presentQueueFamilyIndex, surface, device, renderPass);
 }
@@ -292,7 +300,6 @@ void recreateSwapchainContext(GLFWwindow* window, const VkPhysicalDevice& physic
 // TODO
 // Only create a function or possibly a data structure whenever it makes sense (i.e., code duplication or reconstruction)
 // COMMON CASES OF RECONSTRUCTION:
-// - Screen minimization!
 // - Creating different kinds of buffers
 //      - Setting buffer/shader uniform values
 // - Stanford Rabbit Viewer
