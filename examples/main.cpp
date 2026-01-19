@@ -1,128 +1,4 @@
 #include "Engine.h"
-// #include "Transform.h"
-// #include <glm/gtc/matrix_transform.hpp>
-
-// const float FOV_Y = 2.0f;
-// const float CAMERA_SPEED = 1.0f;
-
-// silk::Engine engine(WIDTH, HEIGHT, APPLICATION_NAME);
-// silk::Scene scene;
-// silk::Entity cam = scene.createEntity(silk::Camera{FOV_Y}, silk::Transform{});
-// glm::vec2 dirInput(0.0f);
-
-// const glm::vec4 BLACK(0.0f);
-// const glm::vec4 RED(1.0f, 0.0f, 0.0f, 1.0f);
-// const glm::vec4 GREEN(0.0f, 1.0f, 0.0f, 1.0f);
-// const glm::vec4 BLUE(0.0f, 0.0f, 1.0f, 1.0f);
-// const glm::vec4 WHITE(1.0f, 1.0f, 1.0f, 1.0f);
-
-// glm::vec4 tint = WHITE;
-// void keyCallback(GLFWwindow* window __attribute__((unused)), int key, int scancode __attribute__((unused)), int action, int mods __attribute__((unused)))
-// {
-//     if (action == GLFW_REPEAT)
-//     {
-//         return;
-//     }
-
-//     // reverse input if action is released
-//     float isPress = action == GLFW_PRESS ? 1.0f : -1.0f;
-
-//     switch (key)
-//     {
-//         case GLFW_KEY_W:
-//             dirInput.y += 1 * isPress;
-//             break;
-//         case GLFW_KEY_A:
-//             dirInput.x -= 1 * isPress;
-//             break;
-//         case GLFW_KEY_S:
-//             dirInput.y -= 1 * isPress;
-//             break;
-//         case GLFW_KEY_D:
-//             dirInput.x += 1 * isPress;
-//             break;
-//         case GLFW_KEY_0:
-//             tint = BLACK;
-//             break;
-//         case GLFW_KEY_1:
-//             tint = RED;
-//             break;
-//         case GLFW_KEY_2:
-//             tint = GREEN;
-//             break;
-//         case GLFW_KEY_3:
-//             tint = BLUE;
-//             break;
-//         case GLFW_KEY_4:
-//             tint = WHITE;
-//             break;
-//     }
-// }
-
-// float mouseButton1IsDown = false;
-// float press_x, press_y;
-// silk::Entity currQuad;
-// void mouseButtonCallback(GLFWwindow* window __attribute__((unused)), int button, int action, int mods __attribute__((unused)))
-// {
-//     if (button == GLFW_MOUSE_BUTTON_1)
-//     {
-//         if (action == GLFW_PRESS)
-//         {
-//             mouseButton1IsDown = true;
-//             engine.getCursorWorldSpace(scene, cam, &press_x, &press_y);
-//             currQuad = scene.createEntity(silk::Quad{}, silk::Transform{}, silk::Tint{tint});
-//         }
-//         else if (action == GLFW_RELEASE)
-//         {
-//             mouseButton1IsDown = false;
-//         }
-//     }
-// }
-
-// void onUpdate(float deltaTime)
-// {
-//     // update quad position
-//     if (mouseButton1IsDown)
-//     {
-//         silk::Transform& quadTransform = scene.getComponent<silk::Transform>(currQuad);
-
-//         float x,y;
-//         engine.getCursorWorldSpace(scene, cam, &x, &y);
-
-//         glm::vec2 pressToCurr = glm::vec2((x - press_x), (y - press_y));
-//         quadTransform.setScale(pressToCurr);
-//         quadTransform.setPosition((x + press_x)/2.0f, (y + press_y)/2.0f);
-//     }
-
-//     // update camera pos + ubo
-//     silk::Transform& camTransform = scene.getComponent<silk::Transform>(cam);
-//     glm::vec2 dist(0.0f);
-//     if (glm::length(dirInput) != 0.0f)
-//     {
-//         dist = glm::normalize(dirInput) * CAMERA_SPEED * deltaTime;
-//     }
-//     camTransform.setPosition(camTransform.getPosition() + dist);
-
-//     silk::CameraUBO ubo{};
-//     ubo.view = glm::inverse(camTransform.getMatrix());
-
-//     const VkExtent2D& swapchainExtent = engine.getSwapchainExtent();
-//     ubo.proj = scene.getComponent<silk::Camera>(cam).getOrthoMatrix(swapchainExtent.width, swapchainExtent.height);
-//     ubo.proj[1][1] *= -1;
-
-//     engine.memcpyCameraUBO(ubo);
-
-//     // load instance info
-//     std::vector<silk::InstanceData> instanceDatas;
-//     for(silk::Entity e : scene.query<silk::Quad, silk::Transform>())
-//     {
-//         silk::InstanceData i;
-//         i.model = scene.getComponent<silk::Transform>(e).getMatrix();
-//         i.tint = scene.getComponent<silk::Tint>(e).color;
-//         instanceDatas.push_back(i);
-//     }
-//     engine.updateInstanceBuffer(instanceDatas);
-// }
 
 #include <iostream>
 #include <fstream>
@@ -143,33 +19,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
     }
     std::cout << "Validation Layer: " << pCallbackData->pMessage << "\033[39m" << std::endl;
     return VK_FALSE;
-}
-
-static std::vector<char> readFile(const std::string& filename)
-{
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-    if (!file.is_open())
-    {
-        throw std::runtime_error(std::format("Error: failed to open {}!", filename));
-    }
-
-    size_t fileSize = (size_t) file.tellg();
-    std::vector<char> buffer(fileSize);
-
-    file.seekg(0);
-    file.read(buffer.data(), fileSize);
-    file.close();
-
-    return buffer;
-}
-
-VkResult createVkShaderModule(const VkDevice& device, VkShaderModule& shaderModule, const std::vector<char>& code)
-{
-    VkShaderModuleCreateInfo shaderModuleCreateInfo{};
-    shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    shaderModuleCreateInfo.codeSize = code.size();
-    shaderModuleCreateInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
-    return vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule);
 }
 
 VkResult createBuffer(const VkPhysicalDevice& physicalDevice, const VkDevice& device, const VkDeviceSize size, const VkBufferUsageFlags usageFlags, const VkMemoryPropertyFlags propertyFlags, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
@@ -300,13 +149,14 @@ void recreateSwapchainContext(GLFWwindow* window, const VkPhysicalDevice& physic
 // TODO
 // Only create a function or possibly a data structure whenever it makes sense (i.e., code duplication or reconstruction)
 // COMMON CASES OF RECONSTRUCTION:
+// - Stanford Rabbit Viewer
+// - Check for depricated code
 // - Creating different kinds of buffers
 //      - Setting buffer/shader uniform values
-// - Stanford Rabbit Viewer
 // - 2D paint (ImGui support)
-// - Check for depricated code
 // - flatland RC
 // - 3D/screen space RC
+// - Phox Engine
 
 int main()
 {
@@ -434,10 +284,9 @@ int main()
             std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
             vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueFamilyCount, queueFamilies.data());
 
-            int i = 0;
-            for (const auto& queueFamily : queueFamilies)
+            for (uint32_t i = 0; i < queueFamilyCount; i++)
             {
-                if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+                if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
                 {
                     graphicsIndex = i;
                 }
@@ -582,158 +431,50 @@ int main()
     // create SwapchainContext
     std::unique_ptr<silk::SwapchainContext> swapchainContext = std::make_unique<silk::SwapchainContext>(window, physicalDevice, graphicsQueueFamilyIndex, presentQueueFamilyIndex, surface, device, renderPass);
 
+    // needed for any kind of uniform data (textures, buffers, etc.)
     // create VkDescriptorSetLayout
-    VkDescriptorSetLayout descriptorSetLayout;
+    // VkDescriptorSetLayout descriptorSetLayout;
+    // {
+    //     VkDescriptorSetLayoutBinding uboLayoutBinding{};
+    //     uboLayoutBinding.binding = 0;
+    //     uboLayoutBinding.descriptorCount = 1;
+    //     uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    //     uboLayoutBinding.pImmutableSamplers = nullptr;
+    //     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    //     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{};
+    //     descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    //     descriptorSetLayoutCreateInfo.bindingCount = 1;
+    //     descriptorSetLayoutCreateInfo.pBindings = &uboLayoutBinding;
+
+    //     silk::validateVkResult(vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCreateInfo, nullptr, &descriptorSetLayout), "Error: failed to create VkDescriptorSetLayout!");
+    // }
+
+    struct Vertex
     {
-        VkDescriptorSetLayoutBinding uboLayoutBinding{};
-        uboLayoutBinding.binding = 0;
-        uboLayoutBinding.descriptorCount = 1;
-        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uboLayoutBinding.pImmutableSamplers = nullptr;
-        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        glm::vec2 position;
 
-        VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{};
-        descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        descriptorSetLayoutCreateInfo.bindingCount = 1;
-        descriptorSetLayoutCreateInfo.pBindings = &uboLayoutBinding;
+        static VkVertexInputBindingDescription getBindingDescription()
+        {
+            VkVertexInputBindingDescription bindingDescription{};
+            bindingDescription.binding = 0;
+            bindingDescription.stride = sizeof(Vertex);
+            bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+            return bindingDescription;
+        }
 
-        silk::validateVkResult(vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCreateInfo, nullptr, &descriptorSetLayout), "Error: failed to create VkDescriptorSetLayout!");
-    }
+        static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions()
+        {
+            return {
+                { 0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, position) }
+            };
+        }
+    };
 
     // TODO
-    // - make it easy to change VkVertexInputBindingDescription (input rate & stride)
     // - Cull mode support: rasterizationCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-    VkPipelineLayout pipelineLayout;
-    VkPipeline pipeline;
-    // create (graphics) VkPipeline
-    {
-        // relative to binary dir
-        std::vector<char> vertShaderCode = readFile("shaders/vert.spv");
-        std::vector<char> fragShaderCode = readFile("shaders/frag.spv");
-
-        VkShaderModule vertShaderModule;
-        silk::validateVkResult(createVkShaderModule(device, vertShaderModule, vertShaderCode), "Error: failed to create fragment VkShaderModule!");
-
-        VkShaderModule fragShaderModule;
-        silk::validateVkResult(createVkShaderModule(device, fragShaderModule, fragShaderCode), "Error: failed to create fragment VkShaderModule!");
-
-        VkPipelineShaderStageCreateInfo vertShaderStageCreateInfo{};
-        vertShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        vertShaderStageCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        vertShaderStageCreateInfo.module = vertShaderModule;
-        vertShaderStageCreateInfo.pName = "main";
-
-        VkPipelineShaderStageCreateInfo fragShaderStageCreateInfo{};
-        fragShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        fragShaderStageCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        fragShaderStageCreateInfo.module = fragShaderModule;
-        fragShaderStageCreateInfo.pName = "main";
-
-        VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageCreateInfo, fragShaderStageCreateInfo};
-
-        VkPipelineVertexInputStateCreateInfo vertexInputCreateInfo{};
-        vertexInputCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-        std::vector<VkVertexInputBindingDescription> vertexBindingDescriptions;
-        vertexBindingDescriptions.push_back(silk::Vertex::getBindingDescription());
-
-        uint32_t instanceBinding = 1;
-        uint32_t instanceLocation = 1;
-        vertexBindingDescriptions.push_back(silk::InstanceData::getBindingDescription(instanceBinding));
-
-        std::vector<VkVertexInputAttributeDescription> vertexAttributeDescriptions;
-        for (auto vertexAttributeDescription : silk::Vertex::getAttributeDescriptions())
-        {
-            vertexAttributeDescriptions.push_back(vertexAttributeDescription);
-        }
-        for (auto instanceAttributeDescription : silk::InstanceData::getAttributeDescriptions(instanceBinding, instanceLocation))
-        {
-            vertexAttributeDescriptions.push_back(instanceAttributeDescription);
-        }
-
-        vertexInputCreateInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(vertexBindingDescriptions.size());
-        vertexInputCreateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexAttributeDescriptions.size());
-        vertexInputCreateInfo.pVertexBindingDescriptions = vertexBindingDescriptions.data();
-        vertexInputCreateInfo.pVertexAttributeDescriptions = vertexAttributeDescriptions.data();
-
-        VkPipelineInputAssemblyStateCreateInfo inputAssemblyCreateInfo{};
-        inputAssemblyCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssemblyCreateInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        inputAssemblyCreateInfo.primitiveRestartEnable = VK_FALSE;
-
-        VkPipelineViewportStateCreateInfo viewportCreateInfo{};
-        viewportCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportCreateInfo.viewportCount = 1;
-        viewportCreateInfo.scissorCount = 1;
-
-        VkPipelineRasterizationStateCreateInfo rasterizationCreateInfo{};
-        rasterizationCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizationCreateInfo.depthClampEnable = VK_FALSE;
-        rasterizationCreateInfo.rasterizerDiscardEnable = VK_FALSE;
-        rasterizationCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizationCreateInfo.lineWidth = 1.0f;
-        rasterizationCreateInfo.cullMode = VK_CULL_MODE_NONE;
-        rasterizationCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterizationCreateInfo.depthBiasEnable = VK_FALSE;
-
-        VkPipelineMultisampleStateCreateInfo multisamplingCreateInfo{};
-        multisamplingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisamplingCreateInfo.sampleShadingEnable = VK_FALSE;
-        multisamplingCreateInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-        VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        colorBlendAttachment.blendEnable = VK_FALSE;
-
-        VkPipelineColorBlendStateCreateInfo colorBlendCreateInfo{};
-        colorBlendCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colorBlendCreateInfo.logicOpEnable = VK_FALSE;
-        colorBlendCreateInfo.logicOp = VK_LOGIC_OP_COPY;
-        colorBlendCreateInfo.attachmentCount = 1;
-        colorBlendCreateInfo.pAttachments = &colorBlendAttachment;
-        colorBlendCreateInfo.blendConstants[0] = 0.0f;
-        colorBlendCreateInfo.blendConstants[1] = 0.0f;
-        colorBlendCreateInfo.blendConstants[2] = 0.0f;
-        colorBlendCreateInfo.blendConstants[3] = 0.0f;
-
-        std::vector<VkDynamicState> dynamicStates = {
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR
-        };
-        VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo{};
-        dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicStateCreateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-        dynamicStateCreateInfo.pDynamicStates = dynamicStates.data();
-
-        VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
-        pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutCreateInfo.setLayoutCount = 1;
-        pipelineLayoutCreateInfo.pSetLayouts = &descriptorSetLayout;
-        pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
-
-        silk::validateVkResult(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout), "Error: failed to create VkPipelineLayout!");
-
-        VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo{};
-        graphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        graphicsPipelineCreateInfo.stageCount = 2;
-        graphicsPipelineCreateInfo.pStages = shaderStages;
-        graphicsPipelineCreateInfo.pVertexInputState = &vertexInputCreateInfo;
-        graphicsPipelineCreateInfo.pInputAssemblyState = &inputAssemblyCreateInfo;
-        graphicsPipelineCreateInfo.pViewportState = &viewportCreateInfo;
-        graphicsPipelineCreateInfo.pRasterizationState = &rasterizationCreateInfo;
-        graphicsPipelineCreateInfo.pMultisampleState = &multisamplingCreateInfo;
-        graphicsPipelineCreateInfo.pColorBlendState = &colorBlendCreateInfo;
-        graphicsPipelineCreateInfo.pDynamicState = &dynamicStateCreateInfo;
-        graphicsPipelineCreateInfo.layout = pipelineLayout;
-        graphicsPipelineCreateInfo.renderPass = renderPass;
-        graphicsPipelineCreateInfo.subpass = 0;
-        graphicsPipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
-
-        silk::validateVkResult(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, nullptr, &pipeline), "Error: failed to create VkPipeline!");
-
-        vkDestroyShaderModule(device, vertShaderModule, nullptr);
-        vkDestroyShaderModule(device, fragShaderModule, nullptr);
-    }
+    // - only a ptr because we need to manually call free so it must be on heap
+    std::unique_ptr<silk::PipelineContext> pipelineContext(silk::PipelineContext::Create<Vertex>(device, renderPass));
 
     // create VkCommandPool
     VkCommandPool commandPool;
@@ -746,15 +487,16 @@ int main()
         silk::validateVkResult(vkCreateCommandPool(device, &commandPoolCreateInfo, nullptr, &commandPool),"Error: failed to create VkCommandPool!");
     }
 
-    // TODO
-    // - make it easy to create different types of buffers
-    // create (vertex) VkBuffer
-    const std::vector<silk::Vertex> QUAD_VERTICES = {
+    const std::vector<Vertex> QUAD_VERTICES = {
         {{-0.5f, -0.5f}},
         {{0.5f, -0.5f}},
         {{0.5f, 0.5f}},
         {{-0.5f, 0.5f}}
     };
+
+    // TODO
+    // - make it easy to create different types of buffers
+    // create (vertex) VkBuffer
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
     {
@@ -778,30 +520,31 @@ int main()
     }
 
     // create (instance) VkBuffer
-    uint32_t maxInstances = 100;
     const int MAX_FRAMES_IN_FLIGHT = 2;
-    std::vector<uint32_t> instanceCounts;
-    std::vector<VkBuffer> instanceBuffers;
-    std::vector<VkDeviceMemory> instanceBuffersMemory;
-    std::vector<void*> instanceBuffersMapped;
-    {
-        instanceCounts.resize(MAX_FRAMES_IN_FLIGHT);
-        instanceBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-        instanceBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-        instanceBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+    // uint32_t maxInstances = 100;
+    // std::vector<uint32_t> instanceCounts;
+    // std::vector<VkBuffer> instanceBuffers;
+    // std::vector<VkDeviceMemory> instanceBuffersMemory;
+    // std::vector<void*> instanceBuffersMapped;
+    // {
+    //     instanceCounts.resize(MAX_FRAMES_IN_FLIGHT);
+    //     instanceBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    //     instanceBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    //     instanceBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
-        VkDeviceSize instanceBufferSize = sizeof(silk::InstanceData) * maxInstances;
-        for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
-        {
-            silk::validateVkResult(createBuffer(physicalDevice, device, instanceBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, instanceBuffers[i], instanceBuffersMemory[i]), "Error: failed to create buffer!");
-            silk::validateVkResult(vkMapMemory(device, instanceBuffersMemory[i], 0, instanceBufferSize, 0, &instanceBuffersMapped[i]), "Error: failed to map memory!");
-        }
-    }
+    //     VkDeviceSize instanceBufferSize = sizeof(silk::InstanceData) * maxInstances;
+    //     for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
+    //     {
+    //         silk::validateVkResult(createBuffer(physicalDevice, device, instanceBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, instanceBuffers[i], instanceBuffersMemory[i]), "Error: failed to create buffer!");
+    //         silk::validateVkResult(vkMapMemory(device, instanceBuffersMemory[i], 0, instanceBufferSize, 0, &instanceBuffersMapped[i]), "Error: failed to map memory!");
+    //     }
+    // }
 
-    // create (index) VkBuffer
     const std::vector<uint16_t> QUAD_INDICES = {
         0, 1, 2, 2, 3, 0
     };
+
+    // create (index) VkBuffer
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
     {
@@ -824,21 +567,21 @@ int main()
     }
 
     // create (uniform) VkBuffer
-    std::vector<VkBuffer> uniformBuffers;
-    std::vector<VkDeviceMemory> uniformBuffersMemory;
-    std::vector<void*> uniformBuffersMapped;
-    {
-        uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-        uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-        uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+    // std::vector<VkBuffer> uniformBuffers;
+    // std::vector<VkDeviceMemory> uniformBuffersMemory;
+    // std::vector<void*> uniformBuffersMapped;
+    // {
+    //     uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    //     uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    //     uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
-        VkDeviceSize bufferSize = sizeof(silk::CameraUBO);
-        for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
-        {
-            silk::validateVkResult(createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]), "Error: failed to create uniform buffers!");
-            silk::validateVkResult(vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]), "Error: failed to map uniform buffers memory!");
-        }
-    }
+    //     VkDeviceSize bufferSize = sizeof(silk::CameraUBO);
+    //     for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
+    //     {
+    //         silk::validateVkResult(createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]), "Error: failed to create uniform buffers!");
+    //         silk::validateVkResult(vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]), "Error: failed to map uniform buffers memory!");
+    //     }
+    // }
 
     // create VkDescriptorPool
     VkDescriptorPool descriptorPool;
@@ -859,37 +602,37 @@ int main()
     // TODO
     // - how do we link descriptor sets with buffers
     // create VkDescriptorSets
-    std::vector<VkDescriptorSet> descriptorSets;
-    {
-        std::vector<VkDescriptorSetLayout> descriptorSetLayouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
-        VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
-        descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        descriptorSetAllocateInfo.descriptorPool = descriptorPool;
-        descriptorSetAllocateInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-        descriptorSetAllocateInfo.pSetLayouts = descriptorSetLayouts.data();
+    // std::vector<VkDescriptorSet> descriptorSets;
+    // {
+    //     std::vector<VkDescriptorSetLayout> descriptorSetLayouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
+    //     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
+    //     descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    //     descriptorSetAllocateInfo.descriptorPool = descriptorPool;
+    //     descriptorSetAllocateInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    //     descriptorSetAllocateInfo.pSetLayouts = descriptorSetLayouts.data();
 
-        descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-        silk::validateVkResult(vkAllocateDescriptorSets(device, &descriptorSetAllocateInfo, descriptorSets.data()), "Error: failed to create VkDescriptorSets!");
+    //     descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+    //     silk::validateVkResult(vkAllocateDescriptorSets(device, &descriptorSetAllocateInfo, descriptorSets.data()), "Error: failed to create VkDescriptorSets!");
 
-        for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
-        {
-            VkDescriptorBufferInfo descriptorBufferInfo{};
-            descriptorBufferInfo.buffer = uniformBuffers[i];
-            descriptorBufferInfo.offset = 0;
-            descriptorBufferInfo.range = sizeof(silk::CameraUBO);
+    //     for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
+    //     {
+    //         VkDescriptorBufferInfo descriptorBufferInfo{};
+    //         // descriptorBufferInfo.buffer = uniformBuffers[i];
+    //         // descriptorBufferInfo.offset = 0;
+    //         // descriptorBufferInfo.range = sizeof(silk::CameraUBO);
 
-            VkWriteDescriptorSet writeDescriptorSet{};
-            writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            writeDescriptorSet.dstSet = descriptorSets[i];
-            writeDescriptorSet.dstBinding = 0;
-            writeDescriptorSet.dstArrayElement = 0;
-            writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            writeDescriptorSet.descriptorCount = 1;
-            writeDescriptorSet.pBufferInfo = &descriptorBufferInfo;
+    //         VkWriteDescriptorSet writeDescriptorSet{};
+    //         writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    //         writeDescriptorSet.dstSet = descriptorSets[i];
+    //         writeDescriptorSet.dstBinding = 0;
+    //         writeDescriptorSet.dstArrayElement = 0;
+    //         writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    //         writeDescriptorSet.descriptorCount = 1;
+    //         writeDescriptorSet.pBufferInfo = &descriptorBufferInfo;
 
-            vkUpdateDescriptorSets(device, 1, &writeDescriptorSet, 0, nullptr);
-        }
-    }
+    //         vkUpdateDescriptorSets(device, 1, &writeDescriptorSet, 0, nullptr);
+    //     }
+    // }
 
     // allocate VkCommandBuffer
     std::vector<VkCommandBuffer> commandBuffers;
@@ -987,7 +730,7 @@ int main()
 
                 vkCmdBeginRenderPass(commandBuffers[currentFrame], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-                    vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+                    vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineContext->getPipeline());
 
                     VkViewport viewport{};
                     viewport.x = 0.0f;
@@ -1003,15 +746,15 @@ int main()
                     scissor.extent = swapchainContext->getExtent();
                     vkCmdSetScissor(commandBuffers[currentFrame], 0, 1, &scissor);
 
-                    VkBuffer vertexBuffers[] = { vertexBuffer, instanceBuffers[currentFrame] };
+                    VkBuffer vertexBuffers[] = { vertexBuffer };
                     VkDeviceSize offsets[] = { 0, 0 };
-                    vkCmdBindVertexBuffers(commandBuffers[currentFrame], 0, 2, vertexBuffers, offsets);
+                    vkCmdBindVertexBuffers(commandBuffers[currentFrame], 0, 1, vertexBuffers, offsets);
 
                     vkCmdBindIndexBuffer(commandBuffers[currentFrame], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-                    vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+                    // vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
-                    vkCmdDrawIndexed(commandBuffers[currentFrame], indexCount, instanceCounts[currentFrame], 0, 0, 0);
+                    vkCmdDrawIndexed(commandBuffers[currentFrame], indexCount, 1, 0, 0, 0);
 
                 vkCmdEndRenderPass(commandBuffers[currentFrame]);
 
@@ -1074,22 +817,22 @@ int main()
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
     // destroy (uniform) VkBuffer
-    for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
-    {
-        vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
-        vkDestroyBuffer(device, uniformBuffers[i], nullptr);
-    }
+    // for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
+    // {
+    //     vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
+    //     vkDestroyBuffer(device, uniformBuffers[i], nullptr);
+    // }
 
     // destroy (index) VkBuffer
     vkFreeMemory(device, indexBufferMemory, nullptr);
     vkDestroyBuffer(device, indexBuffer, nullptr);
 
     // destroy (instance) VkBuffer
-    for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
-    {
-        vkFreeMemory(device, instanceBuffersMemory[i], nullptr);
-        vkDestroyBuffer(device, instanceBuffers[i], nullptr);
-    }
+    // for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
+    // {
+    //     vkFreeMemory(device, instanceBuffersMemory[i], nullptr);
+    //     vkDestroyBuffer(device, instanceBuffers[i], nullptr);
+    // }
 
     // destroy (vertex) VkBuffer
     vkFreeMemory(device, vertexBufferMemory, nullptr);
@@ -1098,17 +841,16 @@ int main()
     // destroy VkCommandPool
     vkDestroyCommandPool(device, commandPool, nullptr);
 
-    // destroy VkPipeline
-    vkDestroyPipeline(device, pipeline, nullptr);
+    // TODO
+    // destroy PipelineContext
+    pipelineContext.reset();
 
-    // destroy VkPipelineLayout
-    vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 
     // destroy VkDescriptorSetLayout
-    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+    // vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
-    // destroy SwapchainContext
     // TODO
+    // destroy SwapchainContext
     swapchainContext.reset();
 
     // destroy renderPass
