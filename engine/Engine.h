@@ -20,17 +20,51 @@ namespace silk
 
     VkSurfaceFormatKHR getPhysicalDeviceSurfaceFormat(const VkPhysicalDevice& physicalDevice, const VkSurfaceKHR& surface);
 
+    // TODO hide
     std::vector<char> readFile(const std::string& filename);
 
     VkResult createVkShaderModule(const VkDevice& device, VkShaderModule& shaderModule, const std::vector<char>& code);
 
+    struct DeviceContextCreateInfo
+    {
+        const char* applicationName;
+        bool enableValidationLayers = true;
+        std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" };
+        const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+    };
+
+    class DeviceContext
+    {
+    public:
+        DeviceContext(GLFWwindow* window, const DeviceContextCreateInfo& createInfo);
+        ~DeviceContext();
+        VkSurfaceKHR getSurface() const;
+        VkPhysicalDevice getPhysicalDevice() const;
+        VkDevice getDevice() const;
+        VkQueue getGraphicsQueue() const;
+        uint32_t getGraphicsQueueFamilyIndex() const;
+        VkQueue getPresentQueue() const;
+        uint32_t getPresentQueueFamilyIndex() const;
+    private:
+        bool enableValidationLayers;
+        VkInstance instance;
+        VkDebugUtilsMessengerEXT debugMessenger;
+        VkSurfaceKHR surface;
+        VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+        VkDevice device;
+        VkQueue graphicsQueue;
+        uint32_t graphicsQueueFamilyIndex;
+        VkQueue presentQueue;
+        uint32_t presentQueueFamilyIndex;
+    };
+
     class SwapchainContext
     {
     public:
-        SwapchainContext(GLFWwindow* window, const VkPhysicalDevice& physicalDevice, uint32_t graphicsQueueFamilyIndex, uint32_t presentQueueFamilyIndex, const VkSurfaceKHR& surface, const VkDevice& device, const VkRenderPass& renderPass);
+        SwapchainContext(GLFWwindow* window, const DeviceContext& deviceContext, VkRenderPass renderPass);
         ~SwapchainContext();
         const VkExtent2D& getExtent() const;
-        const VkSwapchainKHR& getSwapchain() const;
+        VkSwapchainKHR getSwapchain() const;
         const std::vector<VkFramebuffer>& getFramebuffers() const;
     private:
         VkDevice device;
@@ -50,7 +84,7 @@ namespace silk
     {
     public:
         template <VertexInput... Ts>
-        static PipelineContext* Create(const VkDevice &device, const VkRenderPass &renderPass)
+        static PipelineContext* Create(VkDevice device, VkRenderPass renderPass)
         {
             // relative to binary dir
             std::vector<char> vertShaderCode = readFile("shaders/vert.spv");
@@ -178,15 +212,14 @@ namespace silk
             return pipelineContext;
         }
         ~PipelineContext();
-        const VkPipelineLayout& getPipelineLayout() const;
-        const VkPipeline& getPipeline() const;
+        VkPipelineLayout getPipelineLayout() const;
+        VkPipeline getPipeline() const;
     private:
         PipelineContext() = default;
         VkDevice device;
         VkPipelineLayout pipelineLayout;
         VkPipeline pipeline;
     };
-
 
     // struct Tint
     // {

@@ -35,12 +35,281 @@ namespace silk
         return surfaceFormats[0];
     }
 
-    SwapchainContext::SwapchainContext(GLFWwindow* window, const VkPhysicalDevice& physicalDevice, uint32_t graphicsQueueFamilyIndex, uint32_t presentQueueFamilyIndex, const VkSurfaceKHR& surface, const VkDevice& device, const VkRenderPass& renderPass) : device(device)
+    VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType __attribute__((unused)), const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData __attribute__((unused)))
+    {
+        if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+        {
+            std::cout << "\033[33m";
+        }
+        else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+        {
+            std::cout << "\033[31m";
+        }
+        std::cout << "Validation Layer: " << pCallbackData->pMessage << "\033[39m" << std::endl;
+        return VK_FALSE;
+    }
+
+    DeviceContext::DeviceContext(GLFWwindow* window, const DeviceContextCreateInfo& createInfo) : enableValidationLayers(createInfo.enableValidationLayers)
+    {
+        // create VkInstance
+        VkDebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo{};
+        {
+            // check validation layer support
+            if (createInfo.enableValidationLayers)
+            {
+                uint32_t layerCount;
+                vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+                std::vector<VkLayerProperties> availableLayers(layerCount);
+                vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+                std::set<std::string> requiredValidationLayers(createInfo.validationLayers.begin(), createInfo.validationLayers.end());
+                for (const auto& layerProperties : availableLayers)
+                {
+                    requiredValidationLayers.erase(layerProperties.layerName);
+                }
+
+                if (!requiredValidationLayers.empty())
+                {
+                    throw std::runtime_error("Error: validation layers requested but not available!");
+                }
+            }
+
+            VkApplicationInfo applicationInfo{};
+            applicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+            applicationInfo.pApplicationName = createInfo.applicationName;
+            applicationInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+            applicationInfo.pEngineName = "Silk Engine";
+            applicationInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+            applicationInfo.apiVersion = VK_API_VERSION_1_0;
+
+            VkInstanceCreateInfo instanceCreateInfo{};
+            instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+            instanceCreateInfo.pApplicationInfo = &applicationInfo;
+
+            uint32_t glfwExtensionCount = 0;
+            const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+            std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+            if (createInfo.enableValidationLayers)
+            {
+                extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+            }
+
+            instanceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+            instanceCreateInfo.ppEnabledExtensionNames = extensions.data();
+
+            if (createInfo.enableValidationLayers)
+            {
+                instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(createInfo.validationLayers.size());
+                instanceCreateInfo.ppEnabledLayerNames = createInfo.validationLayers.data();
+
+                debugMessengerCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+                debugMessengerCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+                debugMessengerCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+                debugMessengerCreateInfo.pfnUserCallback = debugCallback;
+
+                instanceCreateInfo.pNext = &debugMessengerCreateInfo;
+            }
+            else
+            {
+                instanceCreateInfo.enabledLayerCount = 0;
+                instanceCreateInfo.pNext = nullptr;
+            }
+
+            silk::validateVkResult(vkCreateInstance(&instanceCreateInfo, nullptr, &instance), "Error: failed to create VkInstance!");
+        }
+
+        // create VkDebugUtilsMessengerEXT
+        if (createInfo.enableValidationLayers)
+        {
+            auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+            if (func != nullptr)
+            {
+                silk::validateVkResult(func(instance, &debugMessengerCreateInfo, nullptr, &debugMessenger), "Error: failed to create VkDebugUtilsMessengerEXT!");
+            }
+        }
+
+        // create VkSurfaceKHR
+        silk::validateVkResult(glfwCreateWindowSurface(instance, window, nullptr, &surface), "Error: failed to create VkSurfaceKHR!");
+
+        // pick VkPhysicalDevice
+        {
+            uint32_t physicalDeviceCount = 0;
+            vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
+            if (physicalDeviceCount == 0)
+            {
+                throw std::runtime_error("Error: failed to find GPUs with Vulkan support!");
+            }
+
+            std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
+            vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices.data());
+
+            for (const auto& physDev : physicalDevices)
+            {
+                // queue family support
+                std::optional<uint32_t> graphicsIndex, presentIndex;
+
+                uint32_t queueFamilyCount = 0;
+                vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueFamilyCount, nullptr);
+                std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+                vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueFamilyCount, queueFamilies.data());
+
+                for (uint32_t i = 0; i < queueFamilyCount; i++)
+                {
+                    if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+                    {
+                        graphicsIndex = i;
+                    }
+
+                    VkBool32 presentSupport = false;
+                    vkGetPhysicalDeviceSurfaceSupportKHR(physDev, i, surface, &presentSupport);
+                    if (presentSupport)
+                    {
+                        presentIndex = i;
+                    }
+
+                    if (graphicsIndex.has_value() && presentIndex.has_value())
+                    {
+                        break;
+                    }
+
+                    i++;
+                }
+
+                // extension support
+                uint32_t extensionCount;
+                vkEnumerateDeviceExtensionProperties(physDev, nullptr, &extensionCount, nullptr);
+                std::vector<VkExtensionProperties> extensions(extensionCount);
+                vkEnumerateDeviceExtensionProperties(physDev, nullptr, &extensionCount, extensions.data());
+
+                std::set<std::string> requiredExtensions(createInfo.deviceExtensions.begin(), createInfo.deviceExtensions.end());
+                for (const auto& extension : extensions)
+                {
+                    requiredExtensions.erase(extension.extensionName);
+                }
+
+                // swapchain support
+                uint32_t surfaceFormatCount;
+                vkGetPhysicalDeviceSurfaceFormatsKHR(physDev, surface, &surfaceFormatCount, nullptr);
+
+                uint32_t presentModeCount;
+                vkGetPhysicalDeviceSurfacePresentModesKHR(physDev, surface, &presentModeCount, nullptr);
+
+                if (graphicsIndex.has_value()
+                    && presentIndex.has_value()
+                    && requiredExtensions.empty()
+                    && surfaceFormatCount != 0
+                    && presentModeCount != 0)
+                {
+                    physicalDevice = physDev;
+                    graphicsQueueFamilyIndex = graphicsIndex.value();
+                    presentQueueFamilyIndex = presentIndex.value();
+                    break;
+                }
+            }
+
+            if (physicalDevice == VK_NULL_HANDLE)
+            {
+                throw std::runtime_error("Error: failed to find a suitable GPU!");
+            }
+        }
+
+        // create (logical) VkDevice
+        {
+            std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+            std::set<uint32_t> uniqueQueueFamilies = {
+                graphicsQueueFamilyIndex,
+                presentQueueFamilyIndex
+            };
+
+            float queuePriority = 1.0f;
+            for (uint32_t queueFamilyIndex : uniqueQueueFamilies)
+            {
+                VkDeviceQueueCreateInfo queueCreateInfo{};
+                queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+                queueCreateInfo.queueFamilyIndex = queueFamilyIndex;
+                queueCreateInfo.queueCount = 1;
+                queueCreateInfo.pQueuePriorities = &queuePriority;
+                queueCreateInfos.push_back(queueCreateInfo);
+            }
+
+            VkPhysicalDeviceFeatures deviceFeatures{};
+
+            VkDeviceCreateInfo deviceCreateInfo{};
+            deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+            deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
+            deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
+            deviceCreateInfo.pEnabledFeatures = &deviceFeatures;
+            deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(createInfo.deviceExtensions.size());
+            deviceCreateInfo.ppEnabledExtensionNames = createInfo.deviceExtensions.data();
+
+            if (createInfo.enableValidationLayers)
+            {
+                deviceCreateInfo.enabledLayerCount = static_cast<uint32_t>(createInfo.validationLayers.size());
+                deviceCreateInfo.ppEnabledLayerNames = createInfo.validationLayers.data();
+            }
+            else
+            {
+                deviceCreateInfo.enabledLayerCount = 0;
+            }
+
+            silk::validateVkResult(vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device), "Error: failed to create VkDevice!");
+        }
+
+        // create queues
+        {
+            vkGetDeviceQueue(device, graphicsQueueFamilyIndex, 0, &graphicsQueue);
+            vkGetDeviceQueue(device, presentQueueFamilyIndex, 0, &presentQueue);
+        }
+
+        std::cout << "Create DeviceContext\n";
+    }
+
+    DeviceContext::~DeviceContext()
+    {
+        // destroy VkDevice
+        vkDestroyDevice(device, nullptr);
+
+        // destroy VkSurfaceKHR
+        vkDestroySurfaceKHR(instance, surface, nullptr);
+
+        // destroy VkDebugUtilsMessengerEXT
+        if (enableValidationLayers)
+        {
+            auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+            if (func != nullptr)
+            {
+                func(instance, debugMessenger, nullptr);
+            }
+        }
+
+        // destroy VkInstance
+        vkDestroyInstance(instance, nullptr);
+
+        std::cout << "Destroy DeviceContext\n";
+    }
+
+    VkSurfaceKHR DeviceContext::getSurface() const { return surface; }
+
+    VkPhysicalDevice DeviceContext::getPhysicalDevice() const { return physicalDevice; }
+
+    VkDevice DeviceContext::getDevice() const { return device; }
+
+    VkQueue DeviceContext::getGraphicsQueue() const { return graphicsQueue; }
+
+    uint32_t DeviceContext::getGraphicsQueueFamilyIndex() const { return graphicsQueueFamilyIndex; }
+
+    VkQueue DeviceContext::getPresentQueue() const { return presentQueue; }
+
+    uint32_t DeviceContext::getPresentQueueFamilyIndex() const { return presentQueueFamilyIndex; }
+
+    SwapchainContext::SwapchainContext(GLFWwindow* window, const DeviceContext& deviceContext, VkRenderPass renderPass) : device(deviceContext.getDevice())
     {
         // create VkSwapchainKHR
         VkSurfaceFormatKHR surfaceFormat;
         {
             // surface format
+            const VkPhysicalDevice& physicalDevice = deviceContext.getPhysicalDevice();
+            const VkSurfaceKHR& surface = deviceContext.getSurface();
             surfaceFormat = getPhysicalDeviceSurfaceFormat(physicalDevice, surface);
 
             // present mode
@@ -95,9 +364,9 @@ namespace silk
             swapchainCreateInfo.imageArrayLayers = 1;
             swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-            uint32_t queueFamilyIndices[] = { graphicsQueueFamilyIndex, presentQueueFamilyIndex };
+            uint32_t queueFamilyIndices[] = { deviceContext.getGraphicsQueueFamilyIndex(), deviceContext.getPresentQueueFamilyIndex() };
 
-            if (graphicsQueueFamilyIndex != presentQueueFamilyIndex)
+            if (queueFamilyIndices[0] != queueFamilyIndices[1])
             {
                 swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
                 swapchainCreateInfo.queueFamilyIndexCount = 2;
@@ -196,7 +465,7 @@ namespace silk
 
     const VkExtent2D& SwapchainContext::getExtent() const { return extent; }
 
-    const VkSwapchainKHR& SwapchainContext::getSwapchain() const { return swapchain; }
+    VkSwapchainKHR SwapchainContext::getSwapchain() const { return swapchain; }
 
     const std::vector<VkFramebuffer>& SwapchainContext::getFramebuffers() const { return framebuffers; }
 
@@ -235,9 +504,9 @@ namespace silk
         std::cout << "Destroy PipelineContext\n";
     }
 
-    const VkPipelineLayout& PipelineContext::getPipelineLayout() const { return pipelineLayout; }
+    VkPipelineLayout PipelineContext::getPipelineLayout() const { return pipelineLayout; }
 
-    const VkPipeline& PipelineContext::getPipeline() const { return pipeline; }
+    VkPipeline PipelineContext::getPipeline() const { return pipeline; }
 
     // glm::mat4 Camera::getOrthoMatrix(uint32_t screenWidth, uint32_t screenHeight) const
     // {
