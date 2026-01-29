@@ -302,7 +302,31 @@ namespace silk
 
     uint32_t DeviceContext::getPresentQueueFamilyIndex() const { return presentQueueFamilyIndex; }
 
-    SwapchainContext::SwapchainContext(GLFWwindow* window, const DeviceContext& deviceContext, VkRenderPass renderPass) : device(deviceContext.getDevice())
+    SwapchainContext::SwapchainContext(GLFWwindow* window, const DeviceContext& deviceContext, VkRenderPass renderPass) : device(deviceContext.getDevice()) { create(window, deviceContext, renderPass); }
+
+    SwapchainContext::~SwapchainContext() { destroy(); }
+
+    void SwapchainContext::recreate(GLFWwindow* window, const silk::DeviceContext& deviceContext, VkRenderPass renderPass)
+    {
+        int width = 0, height = 0;
+        glfwGetFramebufferSize(window, &width, &height);
+        while (width == 0 || height == 0)
+        {
+            glfwGetFramebufferSize(window, &width, &height);
+            glfwWaitEvents();
+        }
+
+        destroy();
+        create(window, deviceContext, renderPass);
+    }
+
+    const VkExtent2D& SwapchainContext::getExtent() const { return extent; }
+
+    VkSwapchainKHR SwapchainContext::getSwapchain() const { return swapchain; }
+
+    const std::vector<VkFramebuffer>& SwapchainContext::getFramebuffers() const { return framebuffers; }
+
+    void SwapchainContext::create(GLFWwindow* window, const DeviceContext& deviceContext, VkRenderPass renderPass)
     {
         // create VkSwapchainKHR
         VkSurfaceFormatKHR surfaceFormat;
@@ -441,7 +465,7 @@ namespace silk
         std::cout << "Create SwapchainContext\n";
     }
 
-    SwapchainContext::~SwapchainContext()
+    void SwapchainContext::destroy()
     {
         vkDeviceWaitIdle(device);
 
@@ -462,12 +486,6 @@ namespace silk
 
         std::cout << "Destroy SwapchainContext\n";
     }
-
-    const VkExtent2D& SwapchainContext::getExtent() const { return extent; }
-
-    VkSwapchainKHR SwapchainContext::getSwapchain() const { return swapchain; }
-
-    const std::vector<VkFramebuffer>& SwapchainContext::getFramebuffers() const { return framebuffers; }
 
     std::vector<char> readFile(const std::string& filename)
     {

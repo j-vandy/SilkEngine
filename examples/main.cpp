@@ -118,25 +118,11 @@ void framebufferResizeCallback(GLFWwindow* window __attribute__((unused)), int w
     framebufferResized = true;
 }
 
-void recreateSwapchainContext(GLFWwindow* window, const silk::DeviceContext& deviceContext, VkRenderPass renderPass, std::unique_ptr<silk::SwapchainContext>& swapchainContext)
-{
-    int width = 0, height = 0;
-    glfwGetFramebufferSize(window, &width, &height);
-    while (width == 0 || height == 0)
-    {
-        glfwGetFramebufferSize(window, &width, &height);
-        glfwWaitEvents();
-    }
-
-    swapchainContext.reset();
-    swapchainContext = std::make_unique<silk::SwapchainContext>(window, deviceContext, renderPass);
-}
-
 // TODO
 // Only create a function or possibly a data structure whenever it makes sense (i.e., code duplication or reconstruction)
 // COMMON CASES OF RECONSTRUCTION:
-// - Remove unique_ptr for other context objects.
 // - Cleanup the deviceContext.getDevice()
+// - load model
 // - Stanford Rabbit Viewer
 // - Check for depricated code
 // - Creating different kinds of buffers
@@ -157,6 +143,7 @@ int main()
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         window = glfwCreateWindow(WIDTH, HEIGHT, APPLICATION_NAME, nullptr, nullptr);
+        // TODO
         // glfwSetWindowUserPointer(window, this);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
     }
@@ -200,7 +187,7 @@ int main()
     }
 
     // create SwapchainContext
-    std::unique_ptr<silk::SwapchainContext> swapchainContext = std::make_unique<silk::SwapchainContext>(window, deviceContext, renderPass);
+    silk::SwapchainContext swapchainContext(window, deviceContext, renderPass);
 
     // needed for any kind of uniform data (textures, buffers, etc.)
     // create VkDescriptorSetLayout
@@ -221,7 +208,6 @@ int main()
     //     silk::validateVkResult(vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCreateInfo, nullptr, &descriptorSetLayout), "Error: failed to create VkDescriptorSetLayout!");
     // }
 
-    // TODO convert vertex to 3D point
     struct Vertex
     {
         glm::vec3 position;
@@ -243,10 +229,7 @@ int main()
         }
     };
 
-    // TODO
-    // - Cull mode support: rasterizationCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-    // - only a ptr because we need to manually call free so it must be on heap
-    std::unique_ptr<silk::PipelineContext> pipelineContext(silk::PipelineContext::Create<Vertex>(deviceContext.getDevice(), renderPass));
+    silk::PipelineContext pipelineContext = silk::PipelineContext::create<Vertex>(deviceContext.getDevice(), renderPass);
 
     // create VkCommandPool
     VkCommandPool commandPool;
@@ -473,11 +456,11 @@ int main()
                 vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
                 uint32_t imageIndex;
-                VkResult result = vkAcquireNextImageKHR(device, swapchainContext->getSwapchain(), UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+                VkResult result = vkAcquireNextImageKHR(device, swapchainContext.getSwapchain(), UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
                 if (result == VK_ERROR_OUT_OF_DATE_KHR)
                 {
-                    recreateSwapchainContext(window, deviceContext, renderPass, swapchainContext);
+                    swapchainContext.recreate(window, deviceContext, renderPass);
                     continue;
                 }
                 else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
@@ -498,9 +481,9 @@ int main()
                 VkRenderPassBeginInfo renderPassBeginInfo{};
                 renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
                 renderPassBeginInfo.renderPass = renderPass;
-                renderPassBeginInfo.framebuffer = swapchainContext->getFramebuffers()[imageIndex];
+                renderPassBeginInfo.framebuffer = swapchainContext.getFramebuffers()[imageIndex];
                 renderPassBeginInfo.renderArea.offset = {0, 0};
-                renderPassBeginInfo.renderArea.extent = swapchainContext->getExtent();
+                renderPassBeginInfo.renderArea.extent = swapchainContext.getExtent();
 
                 VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
                 renderPassBeginInfo.clearValueCount = 1;
@@ -508,20 +491,20 @@ int main()
 
                 vkCmdBeginRenderPass(commandBuffers[currentFrame], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-                    vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineContext->getPipeline());
+                    vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineContext.getPipeline());
 
                     VkViewport viewport{};
                     viewport.x = 0.0f;
                     viewport.y = 0.0f;
-                    viewport.width = static_cast<float>(swapchainContext->getExtent().width);
-                    viewport.height = static_cast<float>(swapchainContext->getExtent().height);
+                    viewport.width = static_cast<float>(swapchainContext.getExtent().width);
+                    viewport.height = static_cast<float>(swapchainContext.getExtent().height);
                     viewport.minDepth = 0.0f;
                     viewport.maxDepth = 1.0f;
                     vkCmdSetViewport(commandBuffers[currentFrame], 0, 1, &viewport);
 
                     VkRect2D scissor{};
                     scissor.offset = {0, 0};
-                    scissor.extent = swapchainContext->getExtent();
+                    scissor.extent = swapchainContext.getExtent();
                     vkCmdSetScissor(commandBuffers[currentFrame], 0, 1, &scissor);
 
                     VkBuffer vertexBuffers[] = { vertexBuffer };
@@ -560,7 +543,7 @@ int main()
                 presentInfo.waitSemaphoreCount = 1;
                 presentInfo.pWaitSemaphores = signalSemaphores;
 
-                VkSwapchainKHR swapchains[] = { swapchainContext->getSwapchain() };
+                VkSwapchainKHR swapchains[] = { swapchainContext.getSwapchain() };
                 presentInfo.swapchainCount = 1;
                 presentInfo.pSwapchains = swapchains;
                 presentInfo.pImageIndices = &imageIndex;
@@ -569,7 +552,7 @@ int main()
                 if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized)
                 {
                     framebufferResized = false;
-                    recreateSwapchainContext(window, deviceContext, renderPass, swapchainContext);
+                    swapchainContext.recreate(window, deviceContext, renderPass);
                 }
                 else if (result != VK_SUCCESS)
                 {
@@ -620,22 +603,11 @@ int main()
     // destroy VkCommandPool
     vkDestroyCommandPool(device, commandPool, nullptr);
 
-    // TODO
-    // destroy PipelineContext
-    pipelineContext.reset();
-
     // destroy VkDescriptorSetLayout
     // vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
-    // TODO
-    // destroy SwapchainContext
-    swapchainContext.reset();
-
     // destroy renderPass
     vkDestroyRenderPass(device, renderPass, nullptr);
-
-    // TODO
-    // destroy DeviceContext
 
     // destroy glfw window
     glfwDestroyWindow(window);

@@ -1,6 +1,6 @@
-add_executable(quad main.cpp)
+add_executable(bunny main.cpp)
 
-target_link_libraries(quad PRIVATE silk_engine)
+target_link_libraries(bunny PRIVATE silk_engine)
 
 # shader compilation
 set(GLSLC "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/tools/shaderc/glslc.exe")
@@ -19,8 +19,8 @@ add_custom_command(
 )
 
 add_custom_target(
-    compile_shaders_quad
+    compile_shaders_bunny
     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/shaders/vert.spv ${CMAKE_CURRENT_BINARY_DIR}/shaders/frag.spv
 )
 
-add_dependencies(quad compile_shaders_quad)
+add_dependencies(bunny compile_shaders_bunny)

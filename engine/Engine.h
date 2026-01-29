@@ -20,7 +20,6 @@ namespace silk
 
     VkSurfaceFormatKHR getPhysicalDeviceSurfaceFormat(const VkPhysicalDevice& physicalDevice, const VkSurfaceKHR& surface);
 
-    // TODO hide
     std::vector<char> readFile(const std::string& filename);
 
     VkResult createVkShaderModule(const VkDevice& device, VkShaderModule& shaderModule, const std::vector<char>& code);
@@ -63,6 +62,7 @@ namespace silk
     public:
         SwapchainContext(GLFWwindow* window, const DeviceContext& deviceContext, VkRenderPass renderPass);
         ~SwapchainContext();
+        void recreate(GLFWwindow* window, const silk::DeviceContext& deviceContext, VkRenderPass renderPass);
         const VkExtent2D& getExtent() const;
         VkSwapchainKHR getSwapchain() const;
         const std::vector<VkFramebuffer>& getFramebuffers() const;
@@ -72,6 +72,8 @@ namespace silk
         VkSwapchainKHR swapchain;
         std::vector<VkImageView> imageViews;
         std::vector<VkFramebuffer> framebuffers;
+        void create(GLFWwindow* window, const DeviceContext& deviceContext, VkRenderPass renderPass);
+        void destroy();
     };
 
     template <typename T>
@@ -84,7 +86,8 @@ namespace silk
     {
     public:
         template <VertexInput... Ts>
-        static PipelineContext* Create(VkDevice device, VkRenderPass renderPass)
+            requires (sizeof...(Ts) > 0)
+        static PipelineContext create(VkDevice device, VkRenderPass renderPass)
         {
             // relative to binary dir
             std::vector<char> vertShaderCode = readFile("shaders/vert.spv");
@@ -115,11 +118,18 @@ namespace silk
 
             std::vector<VkVertexInputBindingDescription> vertexBindingDescriptions;
             std::vector<VkVertexInputAttributeDescription> vertexAttributeDescriptions;
-            ([&vertexBindingDescriptions, &vertexAttributeDescriptions]()
-             {
-            vertexBindingDescriptions.push_back(Ts::getBindingDescription());
-            auto attributeDescriptions = Ts::getAttributeDescriptions();
-            vertexAttributeDescriptions.insert(vertexAttributeDescriptions.end(), attributeDescriptions.begin(), attributeDescriptions.end()); }(), ...);
+            (
+                [&vertexBindingDescriptions, &vertexAttributeDescriptions]() {
+                    vertexBindingDescriptions.push_back(Ts::getBindingDescription());
+                    auto attributeDescriptions = Ts::getAttributeDescriptions();
+                    vertexAttributeDescriptions.insert(vertexAttributeDescriptions.end(), attributeDescriptions.begin(), attributeDescriptions.end());
+                }(),
+                ...
+            );
+            if (vertexBindingDescriptions.size() <= 0 || vertexAttributeDescriptions.size() <= 0)
+            {
+                throw std::runtime_error("Error: failed to get VkVertexInputBindingDescriptions or VkVertexInputAttributeDescription!");
+            }
 
             vertexInputCreateInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(vertexBindingDescriptions.size());
             vertexInputCreateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexAttributeDescriptions.size());
@@ -135,6 +145,9 @@ namespace silk
             viewportCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
             viewportCreateInfo.viewportCount = 1;
             viewportCreateInfo.scissorCount = 1;
+
+            // TODO
+            // - Cull mode support: rasterizationCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
 
             VkPipelineRasterizationStateCreateInfo rasterizationCreateInfo{};
             rasterizationCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -182,10 +195,10 @@ namespace silk
             // pipelineLayoutCreateInfo.pSetLayouts = &descriptorSetLayout;
             pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
 
-            PipelineContext* pipelineContext = new PipelineContext();
-            pipelineContext->device = device;
+            PipelineContext pipelineContext;
+            pipelineContext.device = device;
 
-            validateVkResult(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineContext->pipelineLayout), "Error: failed to create VkPipelineLayout!");
+            validateVkResult(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineContext.pipelineLayout), "Error: failed to create VkPipelineLayout!");
 
             VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo{};
             graphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -198,12 +211,12 @@ namespace silk
             graphicsPipelineCreateInfo.pMultisampleState = &multisamplingCreateInfo;
             graphicsPipelineCreateInfo.pColorBlendState = &colorBlendCreateInfo;
             graphicsPipelineCreateInfo.pDynamicState = &dynamicStateCreateInfo;
-            graphicsPipelineCreateInfo.layout = pipelineContext->pipelineLayout;
+            graphicsPipelineCreateInfo.layout = pipelineContext.pipelineLayout;
             graphicsPipelineCreateInfo.renderPass = renderPass;
             graphicsPipelineCreateInfo.subpass = 0;
             graphicsPipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-            validateVkResult(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, nullptr, &pipelineContext->pipeline), "Error: failed to create VkPipeline!");
+            validateVkResult(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, nullptr, &pipelineContext.pipeline), "Error: failed to create VkPipeline!");
 
             vkDestroyShaderModule(device, vertShaderModule, nullptr);
             vkDestroyShaderModule(device, fragShaderModule, nullptr);
