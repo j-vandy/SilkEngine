@@ -1,4 +1,4 @@
-#include "ECS.h"
+#include "silk/ECS.h"
 
 using namespace silk;
 
@@ -69,6 +69,7 @@ int main()
         assert(result.size() == 2);
         assert((result[0] == a || result[0] == c));
         assert((result[1] == a || result[1] == c));
+        assert((result[0] != b && result[1] != b));
         assert(result[0] != result[1]);
 
         auto emptyResult = scene.query<Name>();

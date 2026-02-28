@@ -50,5 +50,5 @@ After completing the steps above, you can build the project with:
 
 ```bash
 cmake --preset debug
-cmake --build build --preset debug
+cmake --build build
 ```

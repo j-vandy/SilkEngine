@@ -90,8 +90,8 @@ namespace silk
         static PipelineContext create(VkDevice device, VkRenderPass renderPass)
         {
             // relative to binary dir
-            std::vector<char> vertShaderCode = readFile("shaders/vert.spv");
-            std::vector<char> fragShaderCode = readFile("shaders/frag.spv");
+            std::vector<char> vertShaderCode = readFile("shaders/shader.vert.spv");
+            std::vector<char> fragShaderCode = readFile("shaders/shader.frag.spv");
 
             VkShaderModule vertShaderModule;
             validateVkResult(createVkShaderModule(device, vertShaderModule, vertShaderCode), "Error: failed to create fragment VkShaderModule!");

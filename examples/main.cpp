@@ -1,4 +1,4 @@
-#include "Engine.h"
+#include "silk/Engine.h"
 
 #include <iostream>
 #include <fstream>
@@ -121,13 +121,13 @@ void framebufferResizeCallback(GLFWwindow* window __attribute__((unused)), int w
 // TODO
 // Only create a function or possibly a data structure whenever it makes sense (i.e., code duplication or reconstruction)
 // COMMON CASES OF RECONSTRUCTION:
-// - Cleanup the deviceContext.getDevice()
-// - load model
-// - Stanford Rabbit Viewer
+// - use tiny gltf to load model
+// - Stanford bunny viewer (scroll for zoom, click and drag to rot model/cam)
 // - Check for depricated code
 // - Creating different kinds of buffers
 //      - Setting buffer/shader uniform values
 // - 2D paint (ImGui support)
+// - boid
 // - flatland RC
 // - 3D/screen space RC
 // - Phox Engine
