@@ -5,6 +5,7 @@
         "glfw3",
         "glm",
         "vulkan",
+        "tinygltf",
         "shaderc"
     ]
 }

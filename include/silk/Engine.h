@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ECS.h"
+// #include "ECS.h"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -32,6 +32,7 @@ namespace silk
         const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
     };
 
+    // NOTE: does not need to be rebuilt at runtime
     class DeviceContext
     {
     public:
@@ -82,12 +83,13 @@ namespace silk
         { T::getAttributeDescriptions() } -> std::same_as<std::vector<VkVertexInputAttributeDescription>>;
     };
 
+    // NOTE: does not need to be rebuilt at runtime
     class PipelineContext
     {
     public:
         template <VertexInput... Ts>
             requires (sizeof...(Ts) > 0)
-        static PipelineContext create(VkDevice device, VkRenderPass renderPass)
+        static PipelineContext create(VkDevice device, VkRenderPass renderPass, std::vector<VkDescriptorSetLayout> descriptorSetLayouts)
         {
             // relative to binary dir
             std::vector<char> vertShaderCode = readFile("shaders/shader.vert.spv");
@@ -155,7 +157,7 @@ namespace silk
             rasterizationCreateInfo.rasterizerDiscardEnable = VK_FALSE;
             rasterizationCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
             rasterizationCreateInfo.lineWidth = 1.0f;
-            rasterizationCreateInfo.cullMode = VK_CULL_MODE_NONE;
+            rasterizationCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
             rasterizationCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
             rasterizationCreateInfo.depthBiasEnable = VK_FALSE;
 
@@ -189,10 +191,8 @@ namespace silk
 
             VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
             pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-            pipelineLayoutCreateInfo.setLayoutCount = 0;
-            // TODO
-            // pipelineLayoutCreateInfo.setLayoutCount = 1;
-            // pipelineLayoutCreateInfo.pSetLayouts = &descriptorSetLayout;
+            pipelineLayoutCreateInfo.setLayoutCount = descriptorSetLayouts.size();
+            pipelineLayoutCreateInfo.pSetLayouts = descriptorSetLayouts.data();
             pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
 
             PipelineContext pipelineContext;
@@ -240,12 +240,6 @@ namespace silk
     // };
 
     // struct Quad{};
-
-    // struct CameraUBO
-    // {
-    //     alignas(16) glm::mat4 view;
-    //     alignas(16) glm::mat4 proj;
-    // };
 
     // struct Camera
     // {

@@ -31,6 +31,9 @@ target_link_libraries(silk PUBLIC
     Vulkan::Vulkan
 )
 
+find_path(TINYGLTF_INCLUDE_DIRS "tiny_gltf.h")
+target_include_directories(silk PUBLIC ${TINYGLTF_INCLUDE_DIRS})
+
 # shader compilation helper function
 function(silk_compile_shader TARGET SHADER)
     find_program(GLSLC glslc REQUIRED)

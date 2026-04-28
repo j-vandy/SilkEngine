@@ -564,7 +564,6 @@ namespace silk
     //     return attributeDescriptions;
     // }
 
-
     // void framebufferResizeCallback(GLFWwindow* window, int width __attribute__((unused)), int height __attribute__((unused)))
     // {
     //     Engine* engine = static_cast<Engine*>(glfwGetWindowUserPointer(window));
@@ -573,30 +572,6 @@ namespace silk
     //         throw std::runtime_error("Error: unable to cast GLFW window user pointer to Engine*!");
     //     }
     //     engine->shouldResizeFramebuffer();
-    // }
-
-    // static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity __attribute__((unused)), VkDebugUtilsMessageTypeFlagsEXT messageType __attribute__((unused)), const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData __attribute__((unused)))
-    // {
-    //     std::cout << "Validation Layer: " << pCallbackData->pMessage << std::endl;
-    //     return VK_FALSE;
-    // }
-
-    // static std::vector<char> readFile(const std::string& filename)
-    // {
-    //     std::ifstream file(filename, std::ios::ate | std::ios::binary);
-    //     if (!file.is_open())
-    //     {
-    //         throw std::runtime_error(std::format("Error: failed to open {}!", filename));
-    //     }
-
-    //     size_t fileSize = (size_t) file.tellg();
-    //     std::vector<char> buffer(fileSize);
-
-    //     file.seekg(0);
-    //     file.read(buffer.data(), fileSize);
-    //     file.close();
-
-    //     return buffer;
     // }
 
     // Engine::Engine(int width, int height, const char* applicationName)

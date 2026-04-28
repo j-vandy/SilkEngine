@@ -7,6 +7,10 @@
 #include <optional>
 #include <algorithm>
 
+#include <glm/gtc/matrix_transform.hpp>
+#include <chrono>
+#include <tiny_gltf.h>
+
 VkResult createBuffer(const VkPhysicalDevice& physicalDevice, const VkDevice& device, const VkDeviceSize size, const VkBufferUsageFlags usageFlags, const VkMemoryPropertyFlags propertyFlags, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
 {
     VkBufferCreateInfo bufferCreateInfo{};
@@ -121,16 +125,25 @@ void framebufferResizeCallback(GLFWwindow* window __attribute__((unused)), int w
 // TODO
 // Only create a function or possibly a data structure whenever it makes sense (i.e., code duplication or reconstruction)
 // COMMON CASES OF RECONSTRUCTION:
-// - use tiny gltf to load model
-// - Stanford bunny viewer (scroll for zoom, click and drag to rot model/cam)
-// - Check for depricated code
-// - Creating different kinds of buffers
-//      - Setting buffer/shader uniform values
+// - Stanford Bunny Viewer Example
+//      - camera projection with triangle model
+//      - left click and drag to rot camera
+//      - mouse scroll camera moves closer to object
+//      - use tiny gltf to load bunny model
+//      - left click and drag to rot model
+//      - Blinn-Phong shading
+//      - adjust specular value
+// - Check for depricated code on Vulkan website
 // - 2D paint (ImGui support)
-// - boid
-// - flatland RC
-// - 3D/screen space RC
-// - Phox Engine
+// - Improve API
+//      - Creating different kinds of buffers
+//              - Setting buffer/shader uniform values
+// - flatland RC (DUE 7/13)
+// - bilinear fix
+// - Improve API
+// - holographic RC or screen space RC
+// - Improve API
+// - Next project: RC boids, Phox Engine
 
 int main()
 {
@@ -189,28 +202,27 @@ int main()
     // create SwapchainContext
     silk::SwapchainContext swapchainContext(window, deviceContext, renderPass);
 
-    // needed for any kind of uniform data (textures, buffers, etc.)
     // create VkDescriptorSetLayout
-    // VkDescriptorSetLayout descriptorSetLayout;
-    // {
-    //     VkDescriptorSetLayoutBinding uboLayoutBinding{};
-    //     uboLayoutBinding.binding = 0;
-    //     uboLayoutBinding.descriptorCount = 1;
-    //     uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    //     uboLayoutBinding.pImmutableSamplers = nullptr;
-    //     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    VkDescriptorSetLayout descriptorSetLayout;
+    {
+        VkDescriptorSetLayoutBinding uboLayoutBinding{};
+        uboLayoutBinding.binding = 0;
+        uboLayoutBinding.descriptorCount = 1;
+        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uboLayoutBinding.pImmutableSamplers = nullptr;
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-    //     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{};
-    //     descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    //     descriptorSetLayoutCreateInfo.bindingCount = 1;
-    //     descriptorSetLayoutCreateInfo.pBindings = &uboLayoutBinding;
+        VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{};
+        descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        descriptorSetLayoutCreateInfo.bindingCount = 1;
+        descriptorSetLayoutCreateInfo.pBindings = &uboLayoutBinding;
 
-    //     silk::validateVkResult(vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCreateInfo, nullptr, &descriptorSetLayout), "Error: failed to create VkDescriptorSetLayout!");
-    // }
+        silk::validateVkResult(vkCreateDescriptorSetLayout(deviceContext.getDevice(), &descriptorSetLayoutCreateInfo, nullptr, &descriptorSetLayout), "Error: failed to create VkDescriptorSetLayout!");
+    }
 
     struct Vertex
     {
-        glm::vec3 position;
+        glm::vec2 position;
 
         static VkVertexInputBindingDescription getBindingDescription()
         {
@@ -229,7 +241,7 @@ int main()
         }
     };
 
-    silk::PipelineContext pipelineContext = silk::PipelineContext::create<Vertex>(deviceContext.getDevice(), renderPass);
+    silk::PipelineContext pipelineContext = silk::PipelineContext::create<Vertex>(deviceContext.getDevice(), renderPass, {descriptorSetLayout});
 
     // create VkCommandPool
     VkCommandPool commandPool;
@@ -242,10 +254,12 @@ int main()
         silk::validateVkResult(vkCreateCommandPool(deviceContext.getDevice(), &commandPoolCreateInfo, nullptr, &commandPool),"Error: failed to create VkCommandPool!");
     }
 
+    // TODO LOAD BUNNY!
+
     const std::vector<Vertex> TRI_VERTICES = {
-        {{-0.5f, 0.5f, 0.0f}},
-        {{0.5f, 0.5f, 0.0f}},
-        {{0.0f, -0.5f, 0.0f}}
+        {{-0.5f, -0.5f}},
+        {{0.5f, -0.5f}},
+        {{0.0f, 0.5f}}
     };
 
     // TODO
@@ -256,7 +270,7 @@ int main()
     {
         VkPhysicalDevice physicalDevice = deviceContext.getPhysicalDevice();
         VkDevice device = deviceContext.getDevice();
-        VkDeviceSize vertexBufferSize = sizeof(TRI_VERTICES[0]) * TRI_VERTICES.size();
+        VkDeviceSize vertexBufferSize = sizeof(Vertex) * TRI_VERTICES.size();
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
@@ -274,27 +288,6 @@ int main()
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
-
-    // create (instance) VkBuffer
-    const int MAX_FRAMES_IN_FLIGHT = 2;
-    // uint32_t maxInstances = 100;
-    // std::vector<uint32_t> instanceCounts;
-    // std::vector<VkBuffer> instanceBuffers;
-    // std::vector<VkDeviceMemory> instanceBuffersMemory;
-    // std::vector<void*> instanceBuffersMapped;
-    // {
-    //     instanceCounts.resize(MAX_FRAMES_IN_FLIGHT);
-    //     instanceBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    //     instanceBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    //     instanceBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
-
-    //     VkDeviceSize instanceBufferSize = sizeof(silk::InstanceData) * maxInstances;
-    //     for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
-    //     {
-    //         silk::validateVkResult(createBuffer(physicalDevice, device, instanceBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, instanceBuffers[i], instanceBuffersMemory[i]), "Error: failed to create buffer!");
-    //         silk::validateVkResult(vkMapMemory(device, instanceBuffersMemory[i], 0, instanceBufferSize, 0, &instanceBuffersMapped[i]), "Error: failed to map memory!");
-    //     }
-    // }
 
     const std::vector<uint16_t> TRI_INDICES = {
         0, 1, 2
@@ -324,22 +317,51 @@ int main()
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
-    // create (uniform) VkBuffer
-    // std::vector<VkBuffer> uniformBuffers;
-    // std::vector<VkDeviceMemory> uniformBuffersMemory;
-    // std::vector<void*> uniformBuffersMapped;
+    // create (instance) VkBuffer
+    const int MAX_FRAMES_IN_FLIGHT = 2;
+    // uint32_t maxInstances = 100;
+    // std::vector<uint32_t> instanceCounts;
+    // std::vector<VkBuffer> instanceBuffers;
+    // std::vector<VkDeviceMemory> instanceBuffersMemory;
+    // std::vector<void*> instanceBuffersMapped;
     // {
-    //     uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    //     uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    //     uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+    //     instanceCounts.resize(MAX_FRAMES_IN_FLIGHT);
+    //     instanceBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    //     instanceBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    //     instanceBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
-    //     VkDeviceSize bufferSize = sizeof(silk::CameraUBO);
+    //     VkDeviceSize instanceBufferSize = sizeof(silk::InstanceData) * maxInstances;
     //     for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
     //     {
-    //         silk::validateVkResult(createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]), "Error: failed to create uniform buffers!");
-    //         silk::validateVkResult(vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]), "Error: failed to map uniform buffers memory!");
+    //         silk::validateVkResult(createBuffer(physicalDevice, device, instanceBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, instanceBuffers[i], instanceBuffersMemory[i]), "Error: failed to create buffer!");
+    //         silk::validateVkResult(vkMapMemory(device, instanceBuffersMemory[i], 0, instanceBufferSize, 0, &instanceBuffersMapped[i]), "Error: failed to map memory!");
     //     }
     // }
+
+    struct CameraUBO
+    {
+        alignas(16) glm::mat4 view;
+        alignas(16) glm::mat4 proj;
+    };
+
+    // create (uniform) VkBuffer
+    std::vector<VkBuffer> uniformBuffers;
+    std::vector<VkDeviceMemory> uniformBuffersMemory;
+    std::vector<void*> uniformBuffersMapped;
+    {
+        uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+        uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+        VkPhysicalDevice physicalDevice = deviceContext.getPhysicalDevice();
+        VkDevice device = deviceContext.getDevice();
+        VkDeviceSize bufferSize = sizeof(CameraUBO);
+        for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
+        {
+            silk::validateVkResult(createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]), "Error: failed to create uniform buffers!");
+            silk::validateVkResult(vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]), "Error: failed to map uniform buffers memory!");
+        }
+    }
 
     // create VkDescriptorPool
     VkDescriptorPool descriptorPool;
@@ -357,40 +379,38 @@ int main()
         silk::validateVkResult(vkCreateDescriptorPool(deviceContext.getDevice(), &descriptorPoolCreateInfo, nullptr, &descriptorPool), "Error: failed to create VkDescriptorPool!");
     }
 
-    // TODO
-    // - how do we link descriptor sets with buffers
     // create VkDescriptorSets
-    // std::vector<VkDescriptorSet> descriptorSets;
-    // {
-    //     std::vector<VkDescriptorSetLayout> descriptorSetLayouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
-    //     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
-    //     descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    //     descriptorSetAllocateInfo.descriptorPool = descriptorPool;
-    //     descriptorSetAllocateInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-    //     descriptorSetAllocateInfo.pSetLayouts = descriptorSetLayouts.data();
+    std::vector<VkDescriptorSet> descriptorSets;
+    {
+        std::vector<VkDescriptorSetLayout> descriptorSetLayouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
+        VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
+        descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        descriptorSetAllocateInfo.descriptorPool = descriptorPool;
+        descriptorSetAllocateInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        descriptorSetAllocateInfo.pSetLayouts = descriptorSetLayouts.data();
 
-    //     descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-    //     silk::validateVkResult(vkAllocateDescriptorSets(device, &descriptorSetAllocateInfo, descriptorSets.data()), "Error: failed to create VkDescriptorSets!");
+        descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        silk::validateVkResult(vkAllocateDescriptorSets(deviceContext.getDevice(), &descriptorSetAllocateInfo, descriptorSets.data()), "Error: failed to create VkDescriptorSets!");
 
-    //     for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
-    //     {
-    //         VkDescriptorBufferInfo descriptorBufferInfo{};
-    //         // descriptorBufferInfo.buffer = uniformBuffers[i];
-    //         // descriptorBufferInfo.offset = 0;
-    //         // descriptorBufferInfo.range = sizeof(silk::CameraUBO);
+        for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
+        {
+            VkDescriptorBufferInfo descriptorBufferInfo{};
+            descriptorBufferInfo.buffer = uniformBuffers[i];
+            descriptorBufferInfo.offset = 0;
+            descriptorBufferInfo.range = sizeof(CameraUBO);
 
-    //         VkWriteDescriptorSet writeDescriptorSet{};
-    //         writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    //         writeDescriptorSet.dstSet = descriptorSets[i];
-    //         writeDescriptorSet.dstBinding = 0;
-    //         writeDescriptorSet.dstArrayElement = 0;
-    //         writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    //         writeDescriptorSet.descriptorCount = 1;
-    //         writeDescriptorSet.pBufferInfo = &descriptorBufferInfo;
+            VkWriteDescriptorSet writeDescriptorSet{};
+            writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writeDescriptorSet.dstSet = descriptorSets[i];
+            writeDescriptorSet.dstBinding = 0;
+            writeDescriptorSet.dstArrayElement = 0;
+            writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            writeDescriptorSet.descriptorCount = 1;
+            writeDescriptorSet.pBufferInfo = &descriptorBufferInfo;
 
-    //         vkUpdateDescriptorSets(device, 1, &writeDescriptorSet, 0, nullptr);
-    //     }
-    // }
+            vkUpdateDescriptorSets(deviceContext.getDevice(), 1, &writeDescriptorSet, 0, nullptr);
+        }
+    }
 
     // allocate VkCommandBuffer
     std::vector<VkCommandBuffer> commandBuffers;
@@ -432,6 +452,15 @@ int main()
         }
     }
 
+    const float CAM_RADIUS = 10.0f;
+    const float FOVY = 60.0f;
+    const float Z_NEAR = 0.1f;
+    const float Z_FAR = 100.0f;
+    const glm::vec3 CENTER(0.0f);
+    const glm::vec3 UP(0.0f, 1.0f, 0.0f);
+    const auto START_TIME = std::chrono::high_resolution_clock::now();
+    auto previousTime = START_TIME;
+
     // run
     uint32_t indexCount = TRI_INDICES.size();
     {
@@ -443,13 +472,25 @@ int main()
         {
             glfwPollEvents();
 
-            // auto currentTime = std::chrono::high_resolution_clock::now();
-            // float deltaTime = std::chrono::duration<float>(currentTime - previousTime).count();
-            // previousTime = currentTime;
+            auto currentTime = std::chrono::high_resolution_clock::now();
+            float deltaTime = std::chrono::duration<float>(currentTime - previousTime).count();
+            previousTime = currentTime;
             // for (std::function<void(float)> fn : updateCallbacks)
             // {
             //     fn(deltaTime);
             // }
+
+            // update camera UBO uniformBuffers[currentFrame];
+            CameraUBO cameraUBO{};
+
+            float aspect = static_cast<float>(swapchainContext.getExtent().width) / static_cast<float>(swapchainContext.getExtent().height);
+            cameraUBO.proj = glm::perspective(glm::radians(FOVY), aspect, Z_NEAR, Z_FAR);
+            cameraUBO.proj[1][1] *= -1.0f; // vulkan clip space has inverted y-axis
+
+            glm::vec3 eye(0.0f, 0.0f, CAM_RADIUS);
+            cameraUBO.view = glm::lookAt(eye, CENTER, UP);
+
+            memcpy(uniformBuffersMapped[currentFrame], &cameraUBO, sizeof(CameraUBO));
 
             // draw frame
             {
@@ -513,7 +554,7 @@ int main()
 
                     vkCmdBindIndexBuffer(commandBuffers[currentFrame], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-                    // vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+                    vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineContext.getPipelineLayout(), 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
                     vkCmdDrawIndexed(commandBuffers[currentFrame], indexCount, 1, 0, 0, 0);
 
@@ -579,15 +620,11 @@ int main()
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
     // destroy (uniform) VkBuffer
-    // for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
-    // {
-    //     vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
-    //     vkDestroyBuffer(device, uniformBuffers[i], nullptr);
-    // }
-
-    // destroy (index) VkBuffer
-    vkFreeMemory(device, indexBufferMemory, nullptr);
-    vkDestroyBuffer(device, indexBuffer, nullptr);
+    for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
+    {
+        vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
+        vkDestroyBuffer(device, uniformBuffers[i], nullptr);
+    }
 
     // destroy (instance) VkBuffer
     // for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
@@ -595,6 +632,10 @@ int main()
     //     vkFreeMemory(device, instanceBuffersMemory[i], nullptr);
     //     vkDestroyBuffer(device, instanceBuffers[i], nullptr);
     // }
+
+    // destroy (index) VkBuffer
+    vkFreeMemory(device, indexBufferMemory, nullptr);
+    vkDestroyBuffer(device, indexBuffer, nullptr);
 
     // destroy (vertex) VkBuffer
     vkFreeMemory(device, vertexBufferMemory, nullptr);
@@ -604,7 +645,7 @@ int main()
     vkDestroyCommandPool(device, commandPool, nullptr);
 
     // destroy VkDescriptorSetLayout
-    // vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
     // destroy renderPass
     vkDestroyRenderPass(device, renderPass, nullptr);
