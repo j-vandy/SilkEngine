@@ -158,6 +158,7 @@ namespace silk
             rasterizationCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
             rasterizationCreateInfo.lineWidth = 1.0f;
             rasterizationCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+            // rasterizationCreateInfo.cullMode = VK_CULL_MODE_NONE;
             rasterizationCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
             rasterizationCreateInfo.depthBiasEnable = VK_FALSE;
 

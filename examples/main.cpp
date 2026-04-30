@@ -11,6 +11,7 @@
 #include <chrono>
 #include <tiny_gltf.h>
 
+// TODO move to Engine
 VkResult createBuffer(const VkPhysicalDevice& physicalDevice, const VkDevice& device, const VkDeviceSize size, const VkBufferUsageFlags usageFlags, const VkMemoryPropertyFlags propertyFlags, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
 {
     VkBufferCreateInfo bufferCreateInfo{};
@@ -60,6 +61,7 @@ VkResult createBuffer(const VkPhysicalDevice& physicalDevice, const VkDevice& de
     return vkBindBufferMemory(device, buffer, bufferMemory, 0);
 }
 
+// TODO move to Engine
 VkResult copyBuffer(const VkDevice& device, const VkQueue& graphicsQueue, const VkCommandPool& commandPool, const VkBuffer srcBuffer, VkBuffer& dstBuffer, const VkDeviceSize size)
 {
     VkCommandBufferAllocateInfo commandBufferAllocateInfo{};
@@ -122,15 +124,47 @@ void framebufferResizeCallback(GLFWwindow* window __attribute__((unused)), int w
     framebufferResized = true;
 }
 
+glm::vec3 sphericalToCartesian(float radius, float theta, float phi)
+{
+    float thetaRadians = glm::radians(theta);
+    float phiRadians = glm::radians(phi);
+    return glm::vec3(radius * sin(thetaRadians) * sin(phiRadians), radius * cos(phiRadians), radius * cos(thetaRadians) * sin(phiRadians));
+}
+
+const float SCROLL_SPEED = 0.5f;
+float camRadius = 10.0f;
+float theta = 0.0f, phi = 90.0f;
+glm::vec3 cameraPosition(0.0f, 0.0f, camRadius);
+void scrollCallback(GLFWwindow* window, double xoffset, double yoffset)
+{
+    camRadius -= yoffset * SCROLL_SPEED;
+    cameraPosition = sphericalToCartesian(camRadius, theta, phi);
+}
+
+double prevCursorX = 0.0f, prevCursorY = 0.0f;
+bool isLeftMouseButtonDown = false;
+void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
+{
+    if (button == GLFW_MOUSE_BUTTON_1)
+    {
+        if (action == GLFW_PRESS)
+        {
+            glfwGetCursorPos(window, &prevCursorX, &prevCursorY);
+            isLeftMouseButtonDown = true;
+        }
+        else if (action == GLFW_RELEASE)
+        {
+            isLeftMouseButtonDown = false;
+        }
+    }
+}
+
 // TODO
-// Only create a function or possibly a data structure whenever it makes sense (i.e., code duplication or reconstruction)
-// COMMON CASES OF RECONSTRUCTION:
+// Only create API functions or data structures whenever there's Vulkan obj reconstructions or code duplication across examples
 // - Stanford Bunny Viewer Example
-//      - camera projection with triangle model
-//      - left click and drag to rot camera
-//      - mouse scroll camera moves closer to object
 //      - use tiny gltf to load bunny model
-//      - left click and drag to rot model
+//      - right click and drag to rot model
+//      - Add light direction
 //      - Blinn-Phong shading
 //      - adjust specular value
 // - Check for depricated code on Vulkan website
@@ -143,14 +177,14 @@ void framebufferResizeCallback(GLFWwindow* window __attribute__((unused)), int w
 // - Improve API
 // - holographic RC or screen space RC
 // - Improve API
-// - Next project: RC boids, Phox Engine
+// - Next project: Input System, "Phox" Engine
 
 int main()
 {
     // create glfw window
     const uint32_t WIDTH = 960;
     const uint32_t HEIGHT = 960;
-    const char* APPLICATION_NAME = "Demo App";
+    const char* APPLICATION_NAME = "Bunny";
     GLFWwindow* window;
     {
         glfwInit();
@@ -160,6 +194,10 @@ int main()
         // glfwSetWindowUserPointer(window, this);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
     }
+
+    // added callbacks
+    glfwSetScrollCallback(window, scrollCallback);
+    glfwSetMouseButtonCallback(window, mouseButtonCallback);
 
     silk::DeviceContextCreateInfo deviceContextCreateInfo{};
     deviceContextCreateInfo.applicationName = APPLICATION_NAME;
@@ -452,14 +490,13 @@ int main()
         }
     }
 
-    const float CAM_RADIUS = 10.0f;
     const float FOVY = 60.0f;
     const float Z_NEAR = 0.1f;
     const float Z_FAR = 100.0f;
     const glm::vec3 CENTER(0.0f);
     const glm::vec3 UP(0.0f, 1.0f, 0.0f);
     const auto START_TIME = std::chrono::high_resolution_clock::now();
-    auto previousTime = START_TIME;
+    const float ROT_SPEED = 1.0f;
 
     // run
     uint32_t indexCount = TRI_INDICES.size();
@@ -473,22 +510,38 @@ int main()
             glfwPollEvents();
 
             auto currentTime = std::chrono::high_resolution_clock::now();
-            float deltaTime = std::chrono::duration<float>(currentTime - previousTime).count();
-            previousTime = currentTime;
+            // float deltaTime = std::chrono::duration<float>(currentTime - previousTime).count();
+            // previousTime = currentTime;
             // for (std::function<void(float)> fn : updateCallbacks)
             // {
             //     fn(deltaTime);
             // }
 
-            // update camera UBO uniformBuffers[currentFrame];
+            // update camera UBO
             CameraUBO cameraUBO{};
 
             float aspect = static_cast<float>(swapchainContext.getExtent().width) / static_cast<float>(swapchainContext.getExtent().height);
             cameraUBO.proj = glm::perspective(glm::radians(FOVY), aspect, Z_NEAR, Z_FAR);
             cameraUBO.proj[1][1] *= -1.0f; // vulkan clip space has inverted y-axis
 
-            glm::vec3 eye(0.0f, 0.0f, CAM_RADIUS);
-            cameraUBO.view = glm::lookAt(eye, CENTER, UP);
+            // rotate the camera
+            if (isLeftMouseButtonDown)
+            {
+                double currCursorX, currCursorY;
+                glfwGetCursorPos(window, &currCursorX, &currCursorY);
+
+                float deltaX = -currCursorX + prevCursorX;
+                float deltaY = -currCursorY + prevCursorY;
+               
+                theta += deltaX * ROT_SPEED;
+                phi += deltaY * ROT_SPEED;
+
+                prevCursorX = currCursorX;
+                prevCursorY = currCursorY;
+
+                cameraPosition = sphericalToCartesian(camRadius, theta, phi);
+            }
+            cameraUBO.view = glm::lookAt(cameraPosition, CENTER, UP);
 
             memcpy(uniformBuffersMapped[currentFrame], &cameraUBO, sizeof(CameraUBO));
 
