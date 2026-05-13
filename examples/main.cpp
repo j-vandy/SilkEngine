@@ -131,8 +131,8 @@ glm::vec3 sphericalToCartesian(float radius, float theta, float phi)
     return glm::vec3(radius * sin(thetaRadians) * sin(phiRadians), radius * cos(phiRadians), radius * cos(thetaRadians) * sin(phiRadians));
 }
 
-const float SCROLL_SPEED = 0.5f;
-float camRadius = 10.0f;
+const float SCROLL_SPEED = 10.0f;
+float camRadius = 500.0f;
 float theta = 0.0f, phi = 90.0f;
 glm::vec3 cameraPosition(0.0f, 0.0f, camRadius);
 void scrollCallback(GLFWwindow* window, double xoffset, double yoffset)
@@ -161,12 +161,13 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 
 // TODO
 // Only create API functions or data structures whenever there's Vulkan obj reconstructions or code duplication across examples
-// - Stanford Bunny Viewer Example
-//      - use tiny gltf to load bunny model
-//      - right click and drag to rot model
+// - Duck Model Viewer Example
+//      - Add normals to vertex
 //      - Add light direction
+//      - Right click and drag to rot model
+//      - Add texturing
 //      - Blinn-Phong shading
-//      - adjust specular value
+//      - Adjustable specular value
 // - Check for depricated code on Vulkan website
 // - 2D paint (ImGui support)
 // - Improve API
@@ -184,7 +185,7 @@ int main()
     // create glfw window
     const uint32_t WIDTH = 960;
     const uint32_t HEIGHT = 960;
-    const char* APPLICATION_NAME = "Bunny";
+    const char* APPLICATION_NAME = "Rubber Ducky";
     GLFWwindow* window;
     {
         glfwInit();
@@ -260,7 +261,7 @@ int main()
 
     struct Vertex
     {
-        glm::vec2 position;
+        glm::vec3 position;
 
         static VkVertexInputBindingDescription getBindingDescription()
         {
@@ -274,7 +275,7 @@ int main()
         static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions()
         {
             return {
-                { 0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, position) }
+                { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position) }
             };
         }
     };
@@ -292,13 +293,52 @@ int main()
         silk::validateVkResult(vkCreateCommandPool(deviceContext.getDevice(), &commandPoolCreateInfo, nullptr, &commandPool),"Error: failed to create VkCommandPool!");
     }
 
-    // TODO LOAD BUNNY!
+    // load Duck gltf model
+    tinygltf::Model model;
+    {
+        tinygltf::TinyGLTF loader;
+        std::string err;
+        std::string warn;
+        const std::string FILENAME = ".\\model\\Duck.gltf";
 
-    const std::vector<Vertex> TRI_VERTICES = {
-        {{-0.5f, -0.5f}},
-        {{0.5f, -0.5f}},
-        {{0.0f, 0.5f}}
-    };
+        bool res = loader.LoadASCIIFromFile(&model, &err, &warn, FILENAME);
+        if (!warn.empty())
+        {
+            std::cerr << "WARN: " << warn << std::endl;
+        }
+
+        if (!err.empty())
+        {
+            std::cerr << "ERR: " << err << std::endl;
+        }
+
+        if (!res)
+        {
+            std::cerr << "Failed to load glTF: " << FILENAME << std::endl;
+        }
+        else
+        {
+            std::cout << "Loaded glTF: " << FILENAME << std::endl;
+        }
+    }
+
+    const tinygltf::Mesh& mesh = model.meshes[0];
+    const tinygltf::Primitive& primitive = mesh.primitives[0];
+
+    int positionAccessorIndex = primitive.attributes.at("POSITION");
+    const tinygltf::Accessor& positionAccessor = model.accessors[positionAccessorIndex];
+    const tinygltf::BufferView& positionBufferView = model.bufferViews[positionAccessor.bufferView];
+    const tinygltf::Buffer& positionBuffer = model.buffers[positionBufferView.buffer];
+    const float* positions = reinterpret_cast<const float*>(&positionBuffer.data[positionBufferView.byteOffset + positionAccessor.byteOffset]);
+    const uint8_t* positionBase = positionBuffer.data.data() + positionBufferView.byteOffset + positionAccessor.byteOffset;
+    size_t positionStride = positionAccessor.ByteStride(positionBufferView);
+
+    std::vector<Vertex> vertices(positionAccessor.count);
+    for (size_t i = 0; i < positionAccessor.count; i++)
+    {
+        const float* p = reinterpret_cast<const float*>(positionBase + i * positionStride);
+        vertices[i].position = glm::vec3(p[0], p[1], p[2]);
+    }
 
     // TODO
     // - make it easy to create different types of buffers
@@ -308,7 +348,7 @@ int main()
     {
         VkPhysicalDevice physicalDevice = deviceContext.getPhysicalDevice();
         VkDevice device = deviceContext.getDevice();
-        VkDeviceSize vertexBufferSize = sizeof(Vertex) * TRI_VERTICES.size();
+        VkDeviceSize vertexBufferSize = sizeof(Vertex) * vertices.size();
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
@@ -316,7 +356,7 @@ int main()
 
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, vertexBufferSize, 0, &data);
-            memcpy(data, TRI_VERTICES.data(), static_cast<size_t>(vertexBufferSize));
+            memcpy(data, vertices.data(), static_cast<size_t>(vertexBufferSize));
         vkUnmapMemory(device, stagingBufferMemory);
 
         silk::validateVkResult(createBuffer(physicalDevice, device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory), "Error: failed to create vertex buffer!");
@@ -327,9 +367,11 @@ int main()
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
-    const std::vector<uint16_t> TRI_INDICES = {
-        0, 1, 2
-    };
+    const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+    const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
+    const tinygltf::Buffer& modelIndexBuffer = model.buffers[indexBufferView.buffer];
+    const uint16_t* indicesArr = reinterpret_cast<const uint16_t*>(&modelIndexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset]);
+    const std::vector<uint16_t> indices(indicesArr, indicesArr + indexAccessor.count);
 
     // create (index) VkBuffer
     VkBuffer indexBuffer;
@@ -337,7 +379,7 @@ int main()
     {
         VkPhysicalDevice physicalDevice = deviceContext.getPhysicalDevice();
         VkDevice device = deviceContext.getDevice();
-        VkDeviceSize indexBufferSize = sizeof(TRI_INDICES[0]) * TRI_INDICES.size(); 
+        VkDeviceSize indexBufferSize = sizeof(uint16_t) * indices.size(); 
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
@@ -345,7 +387,7 @@ int main()
 
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, indexBufferSize, 0, &data);
-            memcpy(data, TRI_INDICES.data(), static_cast<size_t>(indexBufferSize));
+            memcpy(data, indices.data(), static_cast<size_t>(indexBufferSize));
         vkUnmapMemory(device, stagingBufferMemory);
 
         silk::validateVkResult(createBuffer(physicalDevice, device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory), "Error: failed to create index buffer!");
@@ -492,14 +534,13 @@ int main()
 
     const float FOVY = 60.0f;
     const float Z_NEAR = 0.1f;
-    const float Z_FAR = 100.0f;
+    const float Z_FAR = 10000.0f;
     const glm::vec3 CENTER(0.0f);
     const glm::vec3 UP(0.0f, 1.0f, 0.0f);
     const auto START_TIME = std::chrono::high_resolution_clock::now();
     const float ROT_SPEED = 1.0f;
 
     // run
-    uint32_t indexCount = TRI_INDICES.size();
     {
         VkDevice device = deviceContext.getDevice();
 
@@ -609,7 +650,7 @@ int main()
 
                     vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineContext.getPipelineLayout(), 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
-                    vkCmdDrawIndexed(commandBuffers[currentFrame], indexCount, 1, 0, 0, 0);
+                    vkCmdDrawIndexed(commandBuffers[currentFrame], indices.size(), 1, 0, 0, 0);
 
                 vkCmdEndRenderPass(commandBuffers[currentFrame]);
 

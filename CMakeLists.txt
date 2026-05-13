@@ -9,10 +9,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_library(silk STATIC
     src/Engine.cpp
     src/Transform.cpp
+    src/tinygltf_impl.cpp
 )
 
 # include paths for engine headers
-target_include_directories(silk PUBLIC include)
+find_path(TINYGLTF_INCLUDE_DIRS "tiny_gltf.h")
+
+target_include_directories(silk PUBLIC
+    include
+    ${TINYGLTF_INCLUDE_DIRS}
+)
 
 if (MSVC)
     target_compile_options(silk PRIVATE /W4 /WX)
@@ -30,9 +36,6 @@ target_link_libraries(silk PUBLIC
     glm::glm
     Vulkan::Vulkan
 )
-
-find_path(TINYGLTF_INCLUDE_DIRS "tiny_gltf.h")
-target_include_directories(silk PUBLIC ${TINYGLTF_INCLUDE_DIRS})
 
 # shader compilation helper function
 function(silk_compile_shader TARGET SHADER)
