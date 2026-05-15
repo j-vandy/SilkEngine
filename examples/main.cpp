@@ -9,7 +9,6 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
-#include <tiny_gltf.h>
 
 // TODO move to Engine
 VkResult createBuffer(const VkPhysicalDevice& physicalDevice, const VkDevice& device, const VkDeviceSize size, const VkBufferUsageFlags usageFlags, const VkMemoryPropertyFlags propertyFlags, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
@@ -262,6 +261,7 @@ int main()
     struct Vertex
     {
         glm::vec3 position;
+        glm::vec3 normal;
 
         static VkVertexInputBindingDescription getBindingDescription()
         {
@@ -275,7 +275,8 @@ int main()
         static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions()
         {
             return {
-                { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position) }
+                { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position) },
+                { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal) },
             };
         }
     };
@@ -293,51 +294,18 @@ int main()
         silk::validateVkResult(vkCreateCommandPool(deviceContext.getDevice(), &commandPoolCreateInfo, nullptr, &commandPool),"Error: failed to create VkCommandPool!");
     }
 
-    // load Duck gltf model
-    tinygltf::Model model;
+    // load Rubber Ducky gltf model
+    const std::string FILENAME = ".\\model\\Duck.gltf";
+    const tinygltf::Model model = silk::loadGLTFModel(FILENAME);
+
+    const std::vector<glm::vec3> positions = silk::getGLTFModelPositions(model);
+    const std::vector<glm::vec3> normals = silk::getGLTFModelNormals(model);
+
+    std::vector<Vertex> vertices(positions.size());
+    for (size_t i = 0; i < positions.size(); i++)
     {
-        tinygltf::TinyGLTF loader;
-        std::string err;
-        std::string warn;
-        const std::string FILENAME = ".\\model\\Duck.gltf";
-
-        bool res = loader.LoadASCIIFromFile(&model, &err, &warn, FILENAME);
-        if (!warn.empty())
-        {
-            std::cerr << "WARN: " << warn << std::endl;
-        }
-
-        if (!err.empty())
-        {
-            std::cerr << "ERR: " << err << std::endl;
-        }
-
-        if (!res)
-        {
-            std::cerr << "Failed to load glTF: " << FILENAME << std::endl;
-        }
-        else
-        {
-            std::cout << "Loaded glTF: " << FILENAME << std::endl;
-        }
-    }
-
-    const tinygltf::Mesh& mesh = model.meshes[0];
-    const tinygltf::Primitive& primitive = mesh.primitives[0];
-
-    int positionAccessorIndex = primitive.attributes.at("POSITION");
-    const tinygltf::Accessor& positionAccessor = model.accessors[positionAccessorIndex];
-    const tinygltf::BufferView& positionBufferView = model.bufferViews[positionAccessor.bufferView];
-    const tinygltf::Buffer& positionBuffer = model.buffers[positionBufferView.buffer];
-    const float* positions = reinterpret_cast<const float*>(&positionBuffer.data[positionBufferView.byteOffset + positionAccessor.byteOffset]);
-    const uint8_t* positionBase = positionBuffer.data.data() + positionBufferView.byteOffset + positionAccessor.byteOffset;
-    size_t positionStride = positionAccessor.ByteStride(positionBufferView);
-
-    std::vector<Vertex> vertices(positionAccessor.count);
-    for (size_t i = 0; i < positionAccessor.count; i++)
-    {
-        const float* p = reinterpret_cast<const float*>(positionBase + i * positionStride);
-        vertices[i].position = glm::vec3(p[0], p[1], p[2]);
+        vertices[i].position = positions[i];
+        vertices[i].normal = normals[i];
     }
 
     // TODO
@@ -367,11 +335,7 @@ int main()
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
-    const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
-    const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
-    const tinygltf::Buffer& modelIndexBuffer = model.buffers[indexBufferView.buffer];
-    const uint16_t* indicesArr = reinterpret_cast<const uint16_t*>(&modelIndexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset]);
-    const std::vector<uint16_t> indices(indicesArr, indicesArr + indexAccessor.count);
+    const std::vector<uint16_t> indices = silk::getGLTFModelIndices(model);
 
     // create (index) VkBuffer
     VkBuffer indexBuffer;

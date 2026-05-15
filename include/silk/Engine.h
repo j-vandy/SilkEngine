@@ -14,6 +14,8 @@
 #include <functional>
 #include <iostream>
 
+#include <tiny_gltf.h>
+
 namespace silk
 {
     void validateVkResult(VkResult result, const char* msg);
@@ -23,6 +25,14 @@ namespace silk
     std::vector<char> readFile(const std::string& filename);
 
     VkResult createVkShaderModule(const VkDevice& device, VkShaderModule& shaderModule, const std::vector<char>& code);
+
+    tinygltf::Model loadGLTFModel(const std::string& filename);
+
+    std::vector<glm::vec3> getGLTFModelPositions(const tinygltf::Model& model);
+
+    std::vector<glm::vec3> getGLTFModelNormals(const tinygltf::Model& model);
+
+    std::vector<uint16_t> getGLTFModelIndices(const tinygltf::Model& model);
 
     struct DeviceContextCreateInfo
     {

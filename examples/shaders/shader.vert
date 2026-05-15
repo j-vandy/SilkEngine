@@ -6,6 +6,7 @@ layout(binding = 0) uniform CameraUBO {
 } ubo;
 
 layout(location = 0) in vec3 inPosition;
+layout(location = 1) in vec3 inNormal;
 
 // layout(location = 1) in mat4 inModel; // mat4 takes locations 1,2,3,4
 // layout(location = 5) in vec4 inTint;

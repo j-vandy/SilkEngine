@@ -35,6 +35,116 @@ namespace silk
         return surfaceFormats[0];
     }
 
+    std::vector<char> readFile(const std::string& filename)
+    {
+        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+        if (!file.is_open())
+        {
+            throw std::runtime_error(std::format("Error: failed to open {}!", filename));
+        }
+
+        size_t fileSize = (size_t) file.tellg();
+        std::vector<char> buffer(fileSize);
+
+        file.seekg(0);
+        file.read(buffer.data(), fileSize);
+        file.close();
+
+        return buffer;
+    }
+
+    VkResult createVkShaderModule(const VkDevice& device, VkShaderModule& shaderModule, const std::vector<char>& code)
+    {
+        VkShaderModuleCreateInfo shaderModuleCreateInfo{};
+        shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        shaderModuleCreateInfo.codeSize = code.size();
+        shaderModuleCreateInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+        return vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule);
+    }
+
+    tinygltf::Model loadGLTFModel(const std::string& filename)
+    {
+        tinygltf::TinyGLTF loader;
+        tinygltf::Model model;
+        std::string err;
+        std::string warn;
+
+        bool res = loader.LoadASCIIFromFile(&model, &err, &warn, filename);
+        if (!warn.empty())
+        {
+            std::cerr << "Warning: " << warn << "\n";
+        }
+
+        if (!err.empty())
+        {
+            throw std::runtime_error("Error: failed to load glTF '" + filename + "'.\nError: " + err + "\n");
+        }
+
+        if (!res)
+        {
+            throw std::runtime_error("Error: failed to load glTF '" + filename + "'.\n");
+        }
+        else
+        {
+            std::cout << "Loaded glTF '" << filename << "'\n";
+        }
+
+        return model;
+    }
+
+    struct AccessorView
+    {
+        const unsigned char* data;
+        const int stride;
+        size_t count;
+    };
+
+    AccessorView getAccessorView(const tinygltf::Model& model, const std::string& accessorName)
+    {
+        const tinygltf::Mesh& mesh = model.meshes[0];
+        const tinygltf::Primitive& primitive = mesh.primitives[0];
+
+        const int accessorIndex = accessorName == "INDEX" ? primitive.indices : primitive.attributes.at(accessorName);
+        const tinygltf::Accessor& accessor = model.accessors[accessorIndex];
+        const tinygltf::BufferView& bufferView = model.bufferViews[accessor.bufferView];
+        const tinygltf::Buffer& buffer = model.buffers[bufferView.buffer];
+
+        return {
+            &buffer.data[bufferView.byteOffset + accessor.byteOffset],
+            accessor.ByteStride(bufferView),
+            accessor.count
+        };
+    }
+
+    std::vector<glm::vec3> readVec3(const AccessorView& accessorView)
+    {
+        std::vector<glm::vec3> out(accessorView.count);
+
+        for (size_t i = 0; i < accessorView.count; i++)
+        {
+            memcpy(&out[i], accessorView.data + i * accessorView.stride, sizeof(glm::vec3));
+        }
+
+        return out;
+    }
+
+    std::vector<glm::vec3> getGLTFModelPositions(const tinygltf::Model& model)
+    {
+        return readVec3(getAccessorView(model, "POSITION"));
+    }
+
+    std::vector<glm::vec3> getGLTFModelNormals(const tinygltf::Model& model)
+    {
+        return readVec3(getAccessorView(model, "NORMAL"));
+    }
+
+    std::vector<uint16_t> getGLTFModelIndices(const tinygltf::Model& model)
+    {
+        AccessorView accessorView = getAccessorView(model, "INDEX");
+        const uint16_t* data = reinterpret_cast<const uint16_t*>(accessorView.data);
+        return std::vector<uint16_t>(data, data + accessorView.count);
+    }
+
     VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType __attribute__((unused)), const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData __attribute__((unused)))
     {
         if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
@@ -486,34 +596,7 @@ namespace silk
 
         std::cout << "Destroy SwapchainContext\n";
     }
-
-    std::vector<char> readFile(const std::string& filename)
-    {
-        std::ifstream file(filename, std::ios::ate | std::ios::binary);
-        if (!file.is_open())
-        {
-            throw std::runtime_error(std::format("Error: failed to open {}!", filename));
-        }
-
-        size_t fileSize = (size_t) file.tellg();
-        std::vector<char> buffer(fileSize);
-
-        file.seekg(0);
-        file.read(buffer.data(), fileSize);
-        file.close();
-
-        return buffer;
-    }
-
-    VkResult createVkShaderModule(const VkDevice& device, VkShaderModule& shaderModule, const std::vector<char>& code)
-    {
-        VkShaderModuleCreateInfo shaderModuleCreateInfo{};
-        shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        shaderModuleCreateInfo.codeSize = code.size();
-        shaderModuleCreateInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
-        return vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule);
-    }
-    
+   
     PipelineContext::~PipelineContext()
     {
         vkDeviceWaitIdle(device);
