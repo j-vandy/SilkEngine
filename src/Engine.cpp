@@ -145,7 +145,7 @@ namespace silk
         return std::vector<uint16_t>(data, data + accessorView.count);
     }
 
-    VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType __attribute__((unused)), const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData __attribute__((unused)))
+    VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, [[maybe_unused]] VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, [[maybe_unused]] void* pUserData)
     {
         if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
         {
@@ -352,16 +352,6 @@ namespace silk
             deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(createInfo.deviceExtensions.size());
             deviceCreateInfo.ppEnabledExtensionNames = createInfo.deviceExtensions.data();
 
-            if (createInfo.enableValidationLayers)
-            {
-                deviceCreateInfo.enabledLayerCount = static_cast<uint32_t>(createInfo.validationLayers.size());
-                deviceCreateInfo.ppEnabledLayerNames = createInfo.validationLayers.data();
-            }
-            else
-            {
-                deviceCreateInfo.enabledLayerCount = 0;
-            }
-
             silk::validateVkResult(vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device), "Error: failed to create VkDevice!");
         }
 
@@ -436,6 +426,8 @@ namespace silk
 
     const std::vector<VkFramebuffer>& SwapchainContext::getFramebuffers() const { return framebuffers; }
 
+    size_t SwapchainContext::getSwapchainImageCount() const { return imageViews.size(); }
+
     void SwapchainContext::create(GLFWwindow* window, const DeviceContext& deviceContext, VkRenderPass renderPass)
     {
         // create VkSwapchainKHR
@@ -482,7 +474,7 @@ namespace silk
                 extent.height = std::clamp(extent.height, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
             }
 
-            uint32_t imageCount= surfaceCapabilities.minImageCount + 1;
+            uint32_t imageCount = surfaceCapabilities.minImageCount + 1;
             if (surfaceCapabilities.maxImageCount > 0 && imageCount > surfaceCapabilities.maxImageCount)
             {
                 imageCount = surfaceCapabilities.maxImageCount;
@@ -528,8 +520,7 @@ namespace silk
             swapchainImages.resize(imageCount);
             vkGetSwapchainImagesKHR(device, swapchain, &imageCount, swapchainImages.data());
 
-            imageViews.resize(swapchainImages.size());
-
+            imageViews.resize(imageCount);
             for (size_t i = 0; i < swapchainImages.size(); i++)
             {
                 VkImageViewCreateInfo imageViewCreateInfo{};
@@ -645,16 +636,6 @@ namespace silk
     //     attributeDescriptions[4].offset = offsetof(InstanceData, tint);
 
     //     return attributeDescriptions;
-    // }
-
-    // void framebufferResizeCallback(GLFWwindow* window, int width __attribute__((unused)), int height __attribute__((unused)))
-    // {
-    //     Engine* engine = static_cast<Engine*>(glfwGetWindowUserPointer(window));
-    //     if (!engine)
-    //     {
-    //         throw std::runtime_error("Error: unable to cast GLFW window user pointer to Engine*!");
-    //     }
-    //     engine->shouldResizeFramebuffer();
     // }
 
     // Engine::Engine(int width, int height, const char* applicationName)

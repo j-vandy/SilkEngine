@@ -77,6 +77,7 @@ namespace silk
         const VkExtent2D& getExtent() const;
         VkSwapchainKHR getSwapchain() const;
         const std::vector<VkFramebuffer>& getFramebuffers() const;
+        size_t getSwapchainImageCount() const;
     private:
         VkDevice device;
         VkExtent2D extent;

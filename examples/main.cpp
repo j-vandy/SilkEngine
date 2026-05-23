@@ -118,7 +118,7 @@ VkResult copyBuffer(const VkDevice& device, const VkQueue& graphicsQueue, const 
 }
 
 bool framebufferResized = false;
-void framebufferResizeCallback(GLFWwindow* window __attribute__((unused)), int width __attribute__((unused)), int height __attribute__((unused)))
+void framebufferResizeCallback([[maybe_unused]] GLFWwindow* window, [[maybe_unused]] int width, [[maybe_unused]] int height)
 {
     framebufferResized = true;
 }
@@ -472,12 +472,12 @@ int main()
 
     // create synchronization objects
     std::vector<VkSemaphore> imageAvailableSemaphores;
-    std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
+    std::vector<VkSemaphore> renderFinishedSemaphores;
     {
         imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+        renderFinishedSemaphores.resize(swapchainContext.getSwapchainImageCount());
 
         VkSemaphoreCreateInfo semaphoreCreateInfo{};
         semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -489,10 +489,13 @@ int main()
         VkDevice device = deviceContext.getDevice();
         for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
         {
-            
             silk::validateVkResult(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &imageAvailableSemaphores[i]), "Error: failed to create VkSemaphore!");
-            silk::validateVkResult(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphores[i]), "Error: failed to create VkSemaphore!");
             silk::validateVkResult(vkCreateFence(device, &fenceCreateInfo, nullptr, &inFlightFences[i]), "Error: failed to create VkFence!");
+        }
+
+        for (size_t i = 0; i < renderFinishedSemaphores.size(); i++)
+        {
+            silk::validateVkResult(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphores[i]), "Error: failed to create VkSemaphore!");
         }
     }
 
@@ -523,32 +526,34 @@ int main()
             // }
 
             // update camera UBO
-            CameraUBO cameraUBO{};
-
-            float aspect = static_cast<float>(swapchainContext.getExtent().width) / static_cast<float>(swapchainContext.getExtent().height);
-            cameraUBO.proj = glm::perspective(glm::radians(FOVY), aspect, Z_NEAR, Z_FAR);
-            cameraUBO.proj[1][1] *= -1.0f; // vulkan clip space has inverted y-axis
-
-            // rotate the camera
-            if (isLeftMouseButtonDown)
             {
-                double currCursorX, currCursorY;
-                glfwGetCursorPos(window, &currCursorX, &currCursorY);
+                CameraUBO cameraUBO{};
 
-                float deltaX = -currCursorX + prevCursorX;
-                float deltaY = -currCursorY + prevCursorY;
-               
-                theta += deltaX * ROT_SPEED;
-                phi += deltaY * ROT_SPEED;
+                float aspect = static_cast<float>(swapchainContext.getExtent().width) / static_cast<float>(swapchainContext.getExtent().height);
+                cameraUBO.proj = glm::perspective(glm::radians(FOVY), aspect, Z_NEAR, Z_FAR);
+                cameraUBO.proj[1][1] *= -1.0f; // vulkan clip space has inverted y-axis
 
-                prevCursorX = currCursorX;
-                prevCursorY = currCursorY;
+                // rotate the camera
+                if (isLeftMouseButtonDown)
+                {
+                    double currCursorX, currCursorY;
+                    glfwGetCursorPos(window, &currCursorX, &currCursorY);
 
-                cameraPosition = sphericalToCartesian(camRadius, theta, phi);
+                    float deltaX = -currCursorX + prevCursorX;
+                    float deltaY = -currCursorY + prevCursorY;
+                
+                    theta += deltaX * ROT_SPEED;
+                    phi += deltaY * ROT_SPEED;
+
+                    prevCursorX = currCursorX;
+                    prevCursorY = currCursorY;
+
+                    cameraPosition = sphericalToCartesian(camRadius, theta, phi);
+                }
+                cameraUBO.view = glm::lookAt(cameraPosition, CENTER, UP);
+
+                memcpy(uniformBuffersMapped[currentFrame], &cameraUBO, sizeof(CameraUBO));
             }
-            cameraUBO.view = glm::lookAt(cameraPosition, CENTER, UP);
-
-            memcpy(uniformBuffersMapped[currentFrame], &cameraUBO, sizeof(CameraUBO));
 
             // draw frame
             {
@@ -570,7 +575,7 @@ int main()
                 vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
                 vkResetCommandBuffer(commandBuffers[currentFrame], 0);
-                
+
                 // record command buffer
                 VkCommandBufferBeginInfo commandBufferBeginInfo{};
                 commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -631,7 +636,7 @@ int main()
                 submitInfo.commandBufferCount = 1;
                 submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
 
-                VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
+                VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[imageIndex] };
                 submitInfo.signalSemaphoreCount = 1;
                 submitInfo.pSignalSemaphores = signalSemaphores;
 
@@ -667,10 +672,13 @@ int main()
     vkDeviceWaitIdle(device);
 
     // destroy synchronization objects
+    for (size_t i = 0; i < renderFinishedSemaphores.size(); i++)
+    {
+        vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
+    }
     for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
     {
         vkDestroyFence(device, inFlightFences[i], nullptr);
-        vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
         vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
     }
 
