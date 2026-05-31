@@ -12,9 +12,11 @@ layout(location = 1) in vec3 inNormal;
 // layout(location = 5) in vec4 inTint;
 
 layout(location = 0) out vec3 fragColor;
+layout(location = 1) out vec3 normal;
 
 void main()
 {
     gl_Position = ubo.proj * ubo.view * vec4(inPosition, 1.0);
     fragColor = vec3(1.0, 0.0, 1.0);
+    normal = inNormal;
 }

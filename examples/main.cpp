@@ -10,113 +10,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
 
-// TODO move to Engine
-VkResult createBuffer(const VkPhysicalDevice& physicalDevice, const VkDevice& device, const VkDeviceSize size, const VkBufferUsageFlags usageFlags, const VkMemoryPropertyFlags propertyFlags, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
-{
-    VkBufferCreateInfo bufferCreateInfo{};
-    bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferCreateInfo.size = size;
-    bufferCreateInfo.usage = usageFlags;
-    bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VkResult result = vkCreateBuffer(device, &bufferCreateInfo, nullptr, &buffer);
-    if (result != VK_SUCCESS)
-    {
-        return result;
-    }
-
-    VkMemoryRequirements memoryRequirements;
-    vkGetBufferMemoryRequirements(device, buffer, &memoryRequirements);
-
-    VkMemoryAllocateInfo memoryAllocateInfo{};
-    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memoryAllocateInfo.allocationSize = memoryRequirements.size;
-
-    VkPhysicalDeviceMemoryProperties memoryProperties;
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
-
-    std::optional<uint32_t> memoryTypeIndex;
-    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++)
-    {
-        if ((memoryRequirements.memoryTypeBits & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & propertyFlags) == propertyFlags)
-        {
-            memoryTypeIndex = i;
-        }
-    }
-
-    if (!memoryTypeIndex.has_value())
-    {
-        return VK_ERROR_UNKNOWN;
-    }
-
-    memoryAllocateInfo.memoryTypeIndex = memoryTypeIndex.value();
-
-    result = vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &bufferMemory);
-    if (result != VK_SUCCESS)
-    {
-        return result;
-    }
-
-    return vkBindBufferMemory(device, buffer, bufferMemory, 0);
-}
-
-// TODO move to Engine
-VkResult copyBuffer(const VkDevice& device, const VkQueue& graphicsQueue, const VkCommandPool& commandPool, const VkBuffer srcBuffer, VkBuffer& dstBuffer, const VkDeviceSize size)
-{
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo{};
-    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    commandBufferAllocateInfo.commandPool = commandPool;
-    commandBufferAllocateInfo.commandBufferCount = 1;
-
-    VkCommandBuffer commandBuffer;
-    VkResult result = vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, &commandBuffer);
-    if (result != VK_SUCCESS)
-    {
-        return result;
-    }
-
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    result = vkBeginCommandBuffer(commandBuffer, &beginInfo);
-    if (result != VK_SUCCESS)
-    {
-        return result;
-    }
-
-        VkBufferCopy bufferCopy{};
-        bufferCopy.size = size;
-        vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &bufferCopy);
-
-    result = vkEndCommandBuffer(commandBuffer);
-    if (result != VK_SUCCESS)
-    {
-        return result;
-    }
-
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-
-    result = vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-    if (result != VK_SUCCESS)
-    {
-        return result;
-    }
-    result = vkQueueWaitIdle(graphicsQueue);
-    if (result != VK_SUCCESS)
-    {
-        return result;
-    }
-
-    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
-
-    return VK_SUCCESS;
-}
-
 bool framebufferResized = false;
 void framebufferResizeCallback([[maybe_unused]] GLFWwindow* window, [[maybe_unused]] int width, [[maybe_unused]] int height)
 {
@@ -160,24 +53,27 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 
 // TODO
 // Only create API functions or data structures whenever there's Vulkan obj reconstructions or code duplication across examples
-// - Duck Model Viewer Example
-//      - Add normals to vertex
-//      - Add light direction
-//      - Right click and drag to rot model
-//      - Add texturing
-//      - Blinn-Phong shading
-//      - Adjustable specular value
-// - Check for depricated code on Vulkan website
-// - 2D paint (ImGui support)
-// - Improve API
-//      - Creating different kinds of buffers
-//              - Setting buffer/shader uniform values
-// - flatland RC (DUE 7/13)
+// - Duck Model Viewer Example (6/7)
+//      - Replace validateVkResult() with VK_CHECK()
+//      - Right click and drag to rot model (6/1)
+//      - Add texturing (6/3)
+//      - Blinn-Phong shading (6/4)
+//      - Adjustable specular value (6/4)
+// - Check for depricated code on Vulkan website (6/10)
+// - 2D paint (6/21)
+//      - Get previous & current frame's mouse position (6/11)
+//      - Draw capsule (6/14)
+//      - Control diameter with +/- (6/16)
+//      - Swap color with numbers (6/18)
+//      - Improve API
+//          - Creating different kinds of buffers
+//          - Setting buffer/shader uniform values
+// - flatland RC (7/13)
 // - bilinear fix
 // - Improve API
 // - holographic RC or screen space RC
 // - Improve API
-// - Next project: Input System, "Phox" Engine
+// - Input System, "Phox" Engine
 
 int main()
 {
@@ -205,9 +101,10 @@ int main()
     silk::DeviceContext deviceContext(window, deviceContextCreateInfo);
 
     // create VkRenderPass
-    VkSurfaceFormatKHR surfaceFormat = silk::getPhysicalDeviceSurfaceFormat(deviceContext.getPhysicalDevice(), deviceContext.getSurface());
     VkRenderPass renderPass;
     {
+        VkSurfaceFormatKHR surfaceFormat = silk::getPhysicalDeviceSurfaceFormat(deviceContext.getPhysicalDevice(), deviceContext.getSurface());
+
         VkAttachmentDescription colorAttachmentDescription{};
         colorAttachmentDescription.format = surfaceFormat.format;
         colorAttachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -222,17 +119,55 @@ int main()
         colorAttachmentReference.attachment = 0;
         colorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+        VkAttachmentDescription depthAttachmentDescription{};
+        depthAttachmentDescription.flags = 0;
+        depthAttachmentDescription.format = silk::getDepthFormat(deviceContext.getPhysicalDevice());
+        depthAttachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthAttachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        depthAttachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachmentDescription.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAttachmentDescription.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference depthAttachmentReference{};
+        depthAttachmentReference.attachment = 1;
+        depthAttachmentReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
         VkSubpassDescription subpass{};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colorAttachmentReference;
+        subpass.pDepthStencilAttachment = &depthAttachmentReference;
+
+        std::vector<VkAttachmentDescription> attachmentDescriptions{ colorAttachmentDescription, depthAttachmentDescription };
+
+        VkSubpassDependency colorDependency{};
+        colorDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        colorDependency.dstSubpass = 0;
+        colorDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        colorDependency.srcAccessMask = 0;
+        colorDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        colorDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+        VkSubpassDependency depthDependency{};
+        depthDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        depthDependency.dstSubpass = 0;
+        depthDependency.srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        depthDependency.srcAccessMask = 0;
+        depthDependency.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        depthDependency.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+        std::vector<VkSubpassDependency> subpassDependencies{ colorDependency, depthDependency };
 
         VkRenderPassCreateInfo renderPassCreateInfo{};
         renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassCreateInfo.attachmentCount = 1;
-        renderPassCreateInfo.pAttachments = &colorAttachmentDescription;
+        renderPassCreateInfo.attachmentCount = attachmentDescriptions.size();
+        renderPassCreateInfo.pAttachments = attachmentDescriptions.data();
         renderPassCreateInfo.subpassCount = 1;
         renderPassCreateInfo.pSubpasses = &subpass;
+        renderPassCreateInfo.dependencyCount = subpassDependencies.size();
+        renderPassCreateInfo.pDependencies = subpassDependencies.data();
 
         silk::validateVkResult(vkCreateRenderPass(deviceContext.getDevice(), &renderPassCreateInfo, nullptr, &renderPass), "Error: failed to create VkRenderPass!");
     }
@@ -320,16 +255,16 @@ int main()
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
-        silk::validateVkResult(createBuffer(physicalDevice, device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory), "Error: failed to create vertex staging buffer!");
+        silk::validateVkResult(silk::createBuffer(physicalDevice, device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory), "Error: failed to create vertex staging buffer!");
 
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, vertexBufferSize, 0, &data);
             memcpy(data, vertices.data(), static_cast<size_t>(vertexBufferSize));
         vkUnmapMemory(device, stagingBufferMemory);
 
-        silk::validateVkResult(createBuffer(physicalDevice, device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory), "Error: failed to create vertex buffer!");
+        silk::validateVkResult(silk::createBuffer(physicalDevice, device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory), "Error: failed to create vertex buffer!");
 
-        silk::validateVkResult(copyBuffer(device, deviceContext.getGraphicsQueue(), commandPool, stagingBuffer, vertexBuffer, vertexBufferSize), "Error: failed to copy buffer!");
+        silk::validateVkResult(silk::copyBuffer(device, deviceContext.getGraphicsQueue(), commandPool, stagingBuffer, vertexBuffer, vertexBufferSize), "Error: failed to copy buffer!");
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
@@ -347,15 +282,15 @@ int main()
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
-        silk::validateVkResult(createBuffer(physicalDevice, device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory), "Error: failed to create index staging buffer!");
+        silk::validateVkResult(silk::createBuffer(physicalDevice, device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory), "Error: failed to create index staging buffer!");
 
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, indexBufferSize, 0, &data);
             memcpy(data, indices.data(), static_cast<size_t>(indexBufferSize));
         vkUnmapMemory(device, stagingBufferMemory);
 
-        silk::validateVkResult(createBuffer(physicalDevice, device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory), "Error: failed to create index buffer!");
-        silk::validateVkResult(copyBuffer(device, deviceContext.getGraphicsQueue(), commandPool, stagingBuffer, indexBuffer, indexBufferSize), "Error: failed to copy buffer!");
+        silk::validateVkResult(silk::createBuffer(physicalDevice, device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory), "Error: failed to create index buffer!");
+        silk::validateVkResult(silk::copyBuffer(device, deviceContext.getGraphicsQueue(), commandPool, stagingBuffer, indexBuffer, indexBufferSize), "Error: failed to copy buffer!");
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
@@ -402,7 +337,7 @@ int main()
         VkDeviceSize bufferSize = sizeof(CameraUBO);
         for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
         {
-            silk::validateVkResult(createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]), "Error: failed to create uniform buffers!");
+            silk::validateVkResult(silk::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]), "Error: failed to create uniform buffers!");
             silk::validateVkResult(vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]), "Error: failed to map uniform buffers memory!");
         }
     }
@@ -543,7 +478,7 @@ int main()
                     float deltaY = -currCursorY + prevCursorY;
                 
                     theta += deltaX * ROT_SPEED;
-                    phi += deltaY * ROT_SPEED;
+                    phi = std::clamp(phi + deltaY * ROT_SPEED, 0.1f, 179.9f);
 
                     prevCursorX = currCursorX;
                     prevCursorY = currCursorY;
@@ -589,9 +524,12 @@ int main()
                 renderPassBeginInfo.renderArea.offset = {0, 0};
                 renderPassBeginInfo.renderArea.extent = swapchainContext.getExtent();
 
-                VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-                renderPassBeginInfo.clearValueCount = 1;
-                renderPassBeginInfo.pClearValues = &clearColor;
+                std::vector<VkClearValue> clearValues(2);
+                clearValues[0].color = { { 0.0f, 0.0f, 0.0f, 1.0f } };
+                clearValues[1].depthStencil = { 1.0f, 0 };
+
+                renderPassBeginInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+                renderPassBeginInfo.pClearValues = clearValues.data();
 
                 vkCmdBeginRenderPass(commandBuffers[currentFrame], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -612,7 +550,7 @@ int main()
                     vkCmdSetScissor(commandBuffers[currentFrame], 0, 1, &scissor);
 
                     VkBuffer vertexBuffers[] = { vertexBuffer };
-                    VkDeviceSize offsets[] = { 0, 0 };
+                    VkDeviceSize offsets[] = { 0 };
                     vkCmdBindVertexBuffers(commandBuffers[currentFrame], 0, 1, vertexBuffers, offsets);
 
                     vkCmdBindIndexBuffer(commandBuffers[currentFrame], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
