@@ -13,7 +13,7 @@
 #include <array>
 #include <functional>
 #include <iostream>
-#include <sstream>
+#include <format>
 
 #include <tiny_gltf.h>
 
@@ -74,25 +74,18 @@ namespace silk
             case VkResult::VK_PIPELINE_BINARY_MISSING_KHR: return "VK_PIPELINE_BINARY_MISSING_KHR";
             case VkResult::VK_ERROR_NOT_ENOUGH_SPACE_KHR: return "VK_ERROR_NOT_ENOUGH_SPACE_KHR";
             case VkResult::VK_RESULT_MAX_ENUM: return "VK_RESULT_MAX_ENUM";
+            default: return "UNKNOWN";
         }
     }
 
-    #define VK_CHECK(x)                                               \
-    do {                                                              \
-        VkResult result = (x);                                        \
-        if (result != VK_SUCCESS)                                     \
-        {                                                             \
-            std::ostringstream oss;                                   \
-            oss << "\tERROR: '" << #x << "' returned "                \
-                << toString(result) << " (" << result << ")\n"        \
-                << '\t' << __func__ << '\n'                           \
-                << '\t' << __FILE__ << ':' <<  __LINE__ << '\n';      \
-            throw std::runtime_error(oss.str());                      \
-        }                                                             \
+    #define VK_CHECK(x)                                                                                                                                                                                                      \
+    do {                                                                                                                                                                                                                     \
+        VkResult result = (x);                                                                                                                                                                                               \
+        if (result != VK_SUCCESS)                                                                                                                                                                                            \
+        {                                                                                                                                                                                                                    \
+            throw std::runtime_error(std::format("\n\tError:      {} ({})\n\tExpression: {}\n\tFunction:   {}\n\tFile:       {}:{}\n", silk::toString(result), static_cast<int>(result), #x, __func__, __FILE__, __LINE__)); \
+        }                                                                                                                                                                                                                    \
     } while (0)
-
-    // TODO: replace with VK_CHECK()
-    void validateVkResult(VkResult result, const char* msg);
 
     VkSurfaceFormatKHR getPhysicalDeviceSurfaceFormat(const VkPhysicalDevice physicalDevice, const VkSurfaceKHR surface);
 
@@ -189,10 +182,10 @@ namespace silk
             std::vector<char> fragShaderCode = readFile("shaders/shader.frag.spv");
 
             VkShaderModule vertShaderModule;
-            validateVkResult(createVkShaderModule(device, vertShaderModule, vertShaderCode), "Error: failed to create fragment VkShaderModule!");
+            VK_CHECK(createVkShaderModule(device, vertShaderModule, vertShaderCode));
 
             VkShaderModule fragShaderModule;
-            validateVkResult(createVkShaderModule(device, fragShaderModule, fragShaderCode), "Error: failed to create fragment VkShaderModule!");
+            VK_CHECK(createVkShaderModule(device, fragShaderModule, fragShaderCode));
 
             VkPipelineShaderStageCreateInfo vertShaderStageCreateInfo{};
             vertShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -301,7 +294,7 @@ namespace silk
             PipelineContext pipelineContext;
             pipelineContext.device = device;
 
-            validateVkResult(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineContext.pipelineLayout), "Error: failed to create VkPipelineLayout!");
+            VK_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineContext.pipelineLayout));
 
             VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo{};
             graphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -320,7 +313,7 @@ namespace silk
             graphicsPipelineCreateInfo.subpass = 0;
             graphicsPipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-            validateVkResult(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, nullptr, &pipelineContext.pipeline), "Error: failed to create VkPipeline!");
+            VK_CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, nullptr, &pipelineContext.pipeline));
 
             vkDestroyShaderModule(device, vertShaderModule, nullptr);
             vkDestroyShaderModule(device, fragShaderModule, nullptr);

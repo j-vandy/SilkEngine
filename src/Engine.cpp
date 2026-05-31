@@ -9,14 +9,6 @@
 
 namespace silk
 {
-    void validateVkResult(VkResult result, const char* msg)
-    {
-        if (result != VK_SUCCESS)
-        {
-            throw std::runtime_error(msg);
-        }
-    }
-
     VkSurfaceFormatKHR getPhysicalDeviceSurfaceFormat(const VkPhysicalDevice physicalDevice, const VkSurfaceKHR surface)
     {
         uint32_t surfaceFormatCount;
@@ -363,7 +355,7 @@ namespace silk
                 instanceCreateInfo.pNext = nullptr;
             }
 
-            silk::validateVkResult(vkCreateInstance(&instanceCreateInfo, nullptr, &instance), "Error: failed to create VkInstance!");
+            VK_CHECK(vkCreateInstance(&instanceCreateInfo, nullptr, &instance));
         }
 
         // create VkDebugUtilsMessengerEXT
@@ -372,12 +364,12 @@ namespace silk
             auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
             if (func != nullptr)
             {
-                silk::validateVkResult(func(instance, &debugMessengerCreateInfo, nullptr, &debugMessenger), "Error: failed to create VkDebugUtilsMessengerEXT!");
+                VK_CHECK(func(instance, &debugMessengerCreateInfo, nullptr, &debugMessenger));
             }
         }
 
         // create VkSurfaceKHR
-        silk::validateVkResult(glfwCreateWindowSurface(instance, window, nullptr, &surface), "Error: failed to create VkSurfaceKHR!");
+        VK_CHECK(glfwCreateWindowSurface(instance, window, nullptr, &surface));
 
         // pick VkPhysicalDevice
         {
@@ -490,7 +482,7 @@ namespace silk
             deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(createInfo.deviceExtensions.size());
             deviceCreateInfo.ppEnabledExtensionNames = createInfo.deviceExtensions.data();
 
-            silk::validateVkResult(vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device), "Error: failed to create VkDevice!");
+            VK_CHECK(vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device));
         }
 
         // create queues
@@ -647,7 +639,7 @@ namespace silk
             swapchainCreateInfo.clipped = VK_TRUE;
             swapchainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
 
-            validateVkResult(vkCreateSwapchainKHR(device, &swapchainCreateInfo, nullptr, &swapchain), "Error: failed to create VkSwapchainKHR!");
+            VK_CHECK(vkCreateSwapchainKHR(device, &swapchainCreateInfo, nullptr, &swapchain));
         }
 
         // create VkImageViews
@@ -676,7 +668,7 @@ namespace silk
                 imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
                 imageViewCreateInfo.subresourceRange.layerCount = 1;
 
-                validateVkResult(vkCreateImageView(device, &imageViewCreateInfo, nullptr, &swapchainImageViews[i]), "Error: failed to create VkImageView!");
+                VK_CHECK(vkCreateImageView(device, &imageViewCreateInfo, nullptr, &swapchainImageViews[i]));
             }
         }
 
@@ -699,15 +691,15 @@ namespace silk
             depthImageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
             depthImageCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-            validateVkResult(vkCreateImage(device, &depthImageCreateInfo, nullptr, &depthImage), "ERROR: failed to create depth VkImage!");
+            VK_CHECK(vkCreateImage(device, &depthImageCreateInfo, nullptr, &depthImage));
 
             VkMemoryRequirements memoryRequirements;
             vkGetImageMemoryRequirements(device, depthImage, &memoryRequirements);
 
             VkMemoryPropertyFlags propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-            validateVkResult(allocateMemory(physicalDevice, device, memoryRequirements, propertyFlags, depthImageMemory), "ERROR: failed depth allocate memory!");
+            VK_CHECK(allocateMemory(physicalDevice, device, memoryRequirements, propertyFlags, depthImageMemory));
 
-            validateVkResult(vkBindImageMemory(device, depthImage, depthImageMemory, 0), "ERROR: failed depth vkBindImageMemory!");
+            VK_CHECK(vkBindImageMemory(device, depthImage, depthImageMemory, 0));
 
             // image views
             VkImageViewCreateInfo depthImageViewCreateInfo{};
@@ -722,7 +714,7 @@ namespace silk
             depthImageViewCreateInfo.subresourceRange.layerCount = 1;
             depthImageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 
-            validateVkResult(vkCreateImageView(device, &depthImageViewCreateInfo, nullptr, &depthImageView), "Error: failed to create depth VkImageView!");
+            VK_CHECK(vkCreateImageView(device, &depthImageViewCreateInfo, nullptr, &depthImageView));
         }
 
         // create VkFramebuffers
@@ -742,7 +734,7 @@ namespace silk
                 framebufferCreateInfo.height = extent.height;
                 framebufferCreateInfo.layers = 1;
 
-                validateVkResult(vkCreateFramebuffer(device, &framebufferCreateInfo, nullptr, &framebuffers[i]), "Error: failed to create VkFramebuffers");
+                VK_CHECK(vkCreateFramebuffer(device, &framebufferCreateInfo, nullptr, &framebuffers[i]));
             }
         }
 

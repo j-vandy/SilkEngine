@@ -54,7 +54,6 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 // TODO
 // Only create API functions or data structures whenever there's Vulkan obj reconstructions or code duplication across examples
 // - Duck Model Viewer Example (6/7)
-//      - Replace validateVkResult() with VK_CHECK()
 //      - Right click and drag to rot model (6/1)
 //      - Add texturing (6/3)
 //      - Blinn-Phong shading (6/4)
@@ -169,7 +168,7 @@ int main()
         renderPassCreateInfo.dependencyCount = subpassDependencies.size();
         renderPassCreateInfo.pDependencies = subpassDependencies.data();
 
-        silk::validateVkResult(vkCreateRenderPass(deviceContext.getDevice(), &renderPassCreateInfo, nullptr, &renderPass), "Error: failed to create VkRenderPass!");
+        VK_CHECK(vkCreateRenderPass(deviceContext.getDevice(), &renderPassCreateInfo, nullptr, &renderPass));
     }
 
     // create SwapchainContext
@@ -190,7 +189,7 @@ int main()
         descriptorSetLayoutCreateInfo.bindingCount = 1;
         descriptorSetLayoutCreateInfo.pBindings = &uboLayoutBinding;
 
-        silk::validateVkResult(vkCreateDescriptorSetLayout(deviceContext.getDevice(), &descriptorSetLayoutCreateInfo, nullptr, &descriptorSetLayout), "Error: failed to create VkDescriptorSetLayout!");
+        VK_CHECK(vkCreateDescriptorSetLayout(deviceContext.getDevice(), &descriptorSetLayoutCreateInfo, nullptr, &descriptorSetLayout));
     }
 
     struct Vertex
@@ -226,7 +225,7 @@ int main()
         commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         commandPoolCreateInfo.queueFamilyIndex = deviceContext.getGraphicsQueueFamilyIndex();
 
-        silk::validateVkResult(vkCreateCommandPool(deviceContext.getDevice(), &commandPoolCreateInfo, nullptr, &commandPool),"Error: failed to create VkCommandPool!");
+        VK_CHECK(vkCreateCommandPool(deviceContext.getDevice(), &commandPoolCreateInfo, nullptr, &commandPool));
     }
 
     // load Rubber Ducky gltf model
@@ -255,16 +254,16 @@ int main()
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
-        silk::validateVkResult(silk::createBuffer(physicalDevice, device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory), "Error: failed to create vertex staging buffer!");
+        VK_CHECK(silk::createBuffer(physicalDevice, device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory));
 
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, vertexBufferSize, 0, &data);
             memcpy(data, vertices.data(), static_cast<size_t>(vertexBufferSize));
         vkUnmapMemory(device, stagingBufferMemory);
 
-        silk::validateVkResult(silk::createBuffer(physicalDevice, device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory), "Error: failed to create vertex buffer!");
+        VK_CHECK(silk::createBuffer(physicalDevice, device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory));
 
-        silk::validateVkResult(silk::copyBuffer(device, deviceContext.getGraphicsQueue(), commandPool, stagingBuffer, vertexBuffer, vertexBufferSize), "Error: failed to copy buffer!");
+        VK_CHECK(silk::copyBuffer(device, deviceContext.getGraphicsQueue(), commandPool, stagingBuffer, vertexBuffer, vertexBufferSize));
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
@@ -282,15 +281,15 @@ int main()
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
-        silk::validateVkResult(silk::createBuffer(physicalDevice, device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory), "Error: failed to create index staging buffer!");
+        VK_CHECK(silk::createBuffer(physicalDevice, device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory));
 
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, indexBufferSize, 0, &data);
             memcpy(data, indices.data(), static_cast<size_t>(indexBufferSize));
         vkUnmapMemory(device, stagingBufferMemory);
 
-        silk::validateVkResult(silk::createBuffer(physicalDevice, device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory), "Error: failed to create index buffer!");
-        silk::validateVkResult(silk::copyBuffer(device, deviceContext.getGraphicsQueue(), commandPool, stagingBuffer, indexBuffer, indexBufferSize), "Error: failed to copy buffer!");
+        VK_CHECK(silk::createBuffer(physicalDevice, device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory));
+        VK_CHECK(silk::copyBuffer(device, deviceContext.getGraphicsQueue(), commandPool, stagingBuffer, indexBuffer, indexBufferSize));
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
@@ -312,8 +311,8 @@ int main()
     //     VkDeviceSize instanceBufferSize = sizeof(silk::InstanceData) * maxInstances;
     //     for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
     //     {
-    //         silk::validateVkResult(createBuffer(physicalDevice, device, instanceBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, instanceBuffers[i], instanceBuffersMemory[i]), "Error: failed to create buffer!");
-    //         silk::validateVkResult(vkMapMemory(device, instanceBuffersMemory[i], 0, instanceBufferSize, 0, &instanceBuffersMapped[i]), "Error: failed to map memory!");
+    //         VK_CHECK(silk::createBuffer(physicalDevice, device, instanceBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, instanceBuffers[i], instanceBuffersMemory[i]));
+    //         VK_CHECK(vkMapMemory(device, instanceBuffersMemory[i], 0, instanceBufferSize, 0, &instanceBuffersMapped[i]));
     //     }
     // }
 
@@ -337,8 +336,8 @@ int main()
         VkDeviceSize bufferSize = sizeof(CameraUBO);
         for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
         {
-            silk::validateVkResult(silk::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]), "Error: failed to create uniform buffers!");
-            silk::validateVkResult(vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]), "Error: failed to map uniform buffers memory!");
+            VK_CHECK(silk::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]));
+            VK_CHECK(vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]));
         }
     }
 
@@ -355,7 +354,7 @@ int main()
         descriptorPoolCreateInfo.pPoolSizes = &descriptorPoolSize;
         descriptorPoolCreateInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
-        silk::validateVkResult(vkCreateDescriptorPool(deviceContext.getDevice(), &descriptorPoolCreateInfo, nullptr, &descriptorPool), "Error: failed to create VkDescriptorPool!");
+        VK_CHECK(vkCreateDescriptorPool(deviceContext.getDevice(), &descriptorPoolCreateInfo, nullptr, &descriptorPool));
     }
 
     // create VkDescriptorSets
@@ -369,7 +368,7 @@ int main()
         descriptorSetAllocateInfo.pSetLayouts = descriptorSetLayouts.data();
 
         descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-        silk::validateVkResult(vkAllocateDescriptorSets(deviceContext.getDevice(), &descriptorSetAllocateInfo, descriptorSets.data()), "Error: failed to create VkDescriptorSets!");
+        VK_CHECK(vkAllocateDescriptorSets(deviceContext.getDevice(), &descriptorSetAllocateInfo, descriptorSets.data()));
 
         for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
         {
@@ -402,7 +401,7 @@ int main()
         commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         commandBufferAllocateInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers.size());
 
-        silk::validateVkResult(vkAllocateCommandBuffers(deviceContext.getDevice(), &commandBufferAllocateInfo, commandBuffers.data()), "Error: failed to allocate VkCommandBuffer!");
+        VK_CHECK(vkAllocateCommandBuffers(deviceContext.getDevice(), &commandBufferAllocateInfo, commandBuffers.data()));
     }
 
     // create synchronization objects
@@ -424,13 +423,13 @@ int main()
         VkDevice device = deviceContext.getDevice();
         for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
         {
-            silk::validateVkResult(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &imageAvailableSemaphores[i]), "Error: failed to create VkSemaphore!");
-            silk::validateVkResult(vkCreateFence(device, &fenceCreateInfo, nullptr, &inFlightFences[i]), "Error: failed to create VkFence!");
+            VK_CHECK(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &imageAvailableSemaphores[i]));
+            VK_CHECK(vkCreateFence(device, &fenceCreateInfo, nullptr, &inFlightFences[i]));
         }
 
         for (size_t i = 0; i < renderFinishedSemaphores.size(); i++)
         {
-            silk::validateVkResult(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphores[i]), "Error: failed to create VkSemaphore!");
+            VK_CHECK(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphores[i]));
         }
     }
 
@@ -515,7 +514,7 @@ int main()
                 VkCommandBufferBeginInfo commandBufferBeginInfo{};
                 commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-                silk::validateVkResult(vkBeginCommandBuffer(commandBuffers[currentFrame], &commandBufferBeginInfo), "Error: failed to begin command buffer!");
+                VK_CHECK(vkBeginCommandBuffer(commandBuffers[currentFrame], &commandBufferBeginInfo));
 
                 VkRenderPassBeginInfo renderPassBeginInfo{};
                 renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -561,7 +560,7 @@ int main()
 
                 vkCmdEndRenderPass(commandBuffers[currentFrame]);
 
-                silk::validateVkResult(vkEndCommandBuffer(commandBuffers[currentFrame]), "Error: failed to begin command buffer!");
+                VK_CHECK(vkEndCommandBuffer(commandBuffers[currentFrame]));
 
                 VkSubmitInfo submitInfo{};
                 submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -578,7 +577,7 @@ int main()
                 submitInfo.signalSemaphoreCount = 1;
                 submitInfo.pSignalSemaphores = signalSemaphores;
 
-                silk::validateVkResult(vkQueueSubmit(deviceContext.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]), "Error: failed to submit queue!");
+                VK_CHECK(vkQueueSubmit(deviceContext.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]));
 
                 VkPresentInfoKHR presentInfo{};
                 presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
