@@ -33,15 +33,14 @@ void scrollCallback(GLFWwindow* window, double xoffset, double yoffset)
     cameraPosition = sphericalToCartesian(camRadius, theta, phi);
 }
 
-double prevCursorX = 0.0f, prevCursorY = 0.0f;
 bool isLeftMouseButtonDown = false;
+bool isRightMouseButtonDown = false;
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
     if (button == GLFW_MOUSE_BUTTON_1)
     {
         if (action == GLFW_PRESS)
         {
-            glfwGetCursorPos(window, &prevCursorX, &prevCursorY);
             isLeftMouseButtonDown = true;
         }
         else if (action == GLFW_RELEASE)
@@ -49,12 +48,33 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
             isLeftMouseButtonDown = false;
         }
     }
+    else if (button == GLFW_MOUSE_BUTTON_2)
+    {
+        if (action == GLFW_PRESS)
+        {
+            isRightMouseButtonDown = true;
+        }
+        else if (action == GLFW_RELEASE)
+        {
+            isRightMouseButtonDown = false;
+        }
+    }
+}
+
+float cursorDeltaX = 0.0f, cursorDeltaY = 0.0f, prevCursorX = 0.0f, prevCursorY = 0.0f;
+void updateCursorDelta(GLFWwindow* window)
+{
+    double currCursorX, currCursorY;
+    glfwGetCursorPos(window, &currCursorX, &currCursorY);
+    cursorDeltaX = static_cast<float>(currCursorX) - prevCursorX;
+    cursorDeltaY = static_cast<float>(currCursorY) - prevCursorY;
+    prevCursorX = static_cast<float>(currCursorX);
+    prevCursorY = static_cast<float>(currCursorY);
 }
 
 // TODO
 // Only create API functions or data structures whenever there's Vulkan obj reconstructions or code duplication across examples
 // - Duck Model Viewer Example (6/7)
-//      - Right click and drag to rot model (6/1)
 //      - Add texturing (6/3)
 //      - Blinn-Phong shading (6/4)
 //      - Adjustable specular value (6/4)
@@ -68,11 +88,9 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 //          - Creating different kinds of buffers
 //          - Setting buffer/shader uniform values
 // - flatland RC (7/13)
-// - bilinear fix
+// - bilinear fix or holographic RC
 // - Improve API
-// - holographic RC or screen space RC
-// - Improve API
-// - Input System, "Phox" Engine
+// - screen space RC, Input System, "Phox" Engine, ...
 
 int main()
 {
@@ -215,7 +233,19 @@ int main()
         }
     };
 
-    silk::PipelineContext pipelineContext = silk::PipelineContext::create<Vertex>(deviceContext.getDevice(), renderPass, {descriptorSetLayout});
+    struct ModelPC
+    {
+        glm::mat4 model = glm::mat4(1.0f);;
+        glm::mat4 normal = glm::mat4(1.0f);;
+
+        static VkShaderStageFlags getStageFlags() { return VK_SHADER_STAGE_VERTEX_BIT; }
+    };
+
+    using VertexInputPack = std::tuple<Vertex>;
+    using PushConstantPack = std::tuple<ModelPC>;
+    auto pipelineContextCreateInfo = silk::PipelineContextCreateInfo::build<VertexInputPack, PushConstantPack>({ descriptorSetLayout });
+
+    silk::PipelineContext pipelineContext(deviceContext.getDevice(), renderPass, pipelineContextCreateInfo);
 
     // create VkCommandPool
     VkCommandPool commandPool;
@@ -439,25 +469,34 @@ int main()
     const glm::vec3 CENTER(0.0f);
     const glm::vec3 UP(0.0f, 1.0f, 0.0f);
     const auto START_TIME = std::chrono::high_resolution_clock::now();
-    const float ROT_SPEED = 1.0f;
+    const float ROT_SPEED = 0.5f;
+
+    ModelPC modelPC{};
+    float modelYaw = 0.0f, modelPitch = 0.0f;
+    const glm::vec3 VEC3_UP(0.0f, 1.0f, 0.0f);
+    const glm::vec3 VEC3_RIGHT(1.0f, 0.0f, 0.0f);
 
     // run
     {
         VkDevice device = deviceContext.getDevice();
 
-        // auto previousTime = std::chrono::high_resolution_clock::now();
+        const auto startTime = std::chrono::high_resolution_clock::now();
+        auto previousTime = startTime;
         uint32_t currentFrame = 0;
         while(!glfwWindowShouldClose(window))
         {
             glfwPollEvents();
 
+            // update loop
             auto currentTime = std::chrono::high_resolution_clock::now();
-            // float deltaTime = std::chrono::duration<float>(currentTime - previousTime).count();
-            // previousTime = currentTime;
+            float deltaTime = std::chrono::duration<float>(currentTime - previousTime).count();
+            previousTime = currentTime;
             // for (std::function<void(float)> fn : updateCallbacks)
             // {
             //     fn(deltaTime);
             // }
+
+            updateCursorDelta(window);
 
             // update camera UBO
             {
@@ -470,23 +509,25 @@ int main()
                 // rotate the camera
                 if (isLeftMouseButtonDown)
                 {
-                    double currCursorX, currCursorY;
-                    glfwGetCursorPos(window, &currCursorX, &currCursorY);
-
-                    float deltaX = -currCursorX + prevCursorX;
-                    float deltaY = -currCursorY + prevCursorY;
-                
-                    theta += deltaX * ROT_SPEED;
-                    phi = std::clamp(phi + deltaY * ROT_SPEED, 0.1f, 179.9f);
-
-                    prevCursorX = currCursorX;
-                    prevCursorY = currCursorY;
+                    theta -= cursorDeltaX * ROT_SPEED;
+                    phi = std::clamp(phi - cursorDeltaY * ROT_SPEED, 0.1f, 179.9f);
 
                     cameraPosition = sphericalToCartesian(camRadius, theta, phi);
                 }
                 cameraUBO.view = glm::lookAt(cameraPosition, CENTER, UP);
 
                 memcpy(uniformBuffersMapped[currentFrame], &cameraUBO, sizeof(CameraUBO));
+            }
+
+            // update ModelPC
+            if (isRightMouseButtonDown)
+            {
+                modelYaw += cursorDeltaX * ROT_SPEED;
+                modelPitch += cursorDeltaY * ROT_SPEED;
+                modelPC.model = glm::mat4(1.0f);
+                modelPC.model = glm::rotate(modelPC.model, glm::radians(modelYaw), VEC3_UP);
+                modelPC.model = glm::rotate(modelPC.model, glm::radians(modelPitch), VEC3_RIGHT);
+                modelPC.normal = glm::transpose(glm::inverse(modelPC.model));
             }
 
             // draw frame
@@ -555,6 +596,8 @@ int main()
                     vkCmdBindIndexBuffer(commandBuffers[currentFrame], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
                     vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineContext.getPipelineLayout(), 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+
+                    vkCmdPushConstants(commandBuffers[currentFrame], pipelineContext.getPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ModelPC), &modelPC);
 
                     vkCmdDrawIndexed(commandBuffers[currentFrame], indices.size(), 1, 0, 0, 0);
 

@@ -5,18 +5,20 @@ layout(binding = 0) uniform CameraUBO {
     mat4 proj;
 } ubo;
 
+layout(push_constant) uniform ModelPC {
+    mat4 model;
+    mat4 normal;
+} pc;
+
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
-
-// layout(location = 1) in mat4 inModel; // mat4 takes locations 1,2,3,4
-// layout(location = 5) in vec4 inTint;
 
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec3 normal;
 
 void main()
 {
-    gl_Position = ubo.proj * ubo.view * vec4(inPosition, 1.0);
+    gl_Position = ubo.proj * ubo.view * pc.model * vec4(inPosition, 1.0);
     fragColor = vec3(1.0, 0.0, 1.0);
-    normal = inNormal;
+    normal = (pc.normal * vec4(inNormal, 0.0)).xyz;
 }
