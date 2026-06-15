@@ -89,6 +89,8 @@ namespace silk
 
     VkSurfaceFormatKHR getPhysicalDeviceSurfaceFormat(const VkPhysicalDevice physicalDevice, const VkSurfaceKHR surface);
 
+    VkFormat getDepthFormat(const VkPhysicalDevice physicalDevice);
+
     std::vector<char> readFile(const std::string& filename);
 
     VkResult createVkShaderModule(const VkDevice device, VkShaderModule& shaderModule, const std::vector<char>& code);
@@ -101,11 +103,11 @@ namespace silk
 
     std::vector<uint16_t> getGLTFModelIndices(const tinygltf::Model& model);
 
+    VkResult allocateMemory(const VkPhysicalDevice physicalDevice, const VkDevice device, const VkMemoryRequirements& memoryRequirements, const VkMemoryPropertyFlags& propertyFlags, VkDeviceMemory& deviceMemory);
+
     VkResult createBuffer(const VkPhysicalDevice physicalDevice, const VkDevice device, const VkDeviceSize size, const VkBufferUsageFlags& usageFlags, const VkMemoryPropertyFlags& propertyFlags, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
 
     VkResult copyBuffer(const VkDevice device, const VkQueue graphicsQueue, const VkCommandPool commandPool, const VkBuffer srcBuffer, VkBuffer dstBuffer, const VkDeviceSize size);
-
-    VkFormat getDepthFormat(const VkPhysicalDevice physicalDevice);
 
     struct DeviceContextCreateInfo
     {
@@ -253,12 +255,79 @@ namespace silk
         VkPipeline pipeline;
     };
 
-    // struct Tint
-    // {
-    //     glm::vec4 color;
-    // };
+    // NOTE: does not need to be rebuilt at runtime
+    template <typename T>
+    class DeviceLocalBufferContext
+    {
+    public:
+        DeviceLocalBufferContext(const DeviceContext& deviceContext, const VkCommandPool commandPool, const std::vector<T>& data, const VkBufferUsageFlags& usageFlags) : device(deviceContext.getDevice())
+        {
+            VkPhysicalDevice physicalDevice = deviceContext.getPhysicalDevice();
+            VkDeviceSize bufferSize = sizeof(T) * data.size();
 
-    // struct Quad{};
+            VkBuffer stagingBuffer;
+            VkDeviceMemory stagingBufferMemory;
+            VK_CHECK(createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory));
+
+            void *stagingData;
+            vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &stagingData);
+            memcpy(stagingData, data.data(), static_cast<size_t>(bufferSize));
+            vkUnmapMemory(device, stagingBufferMemory);
+
+            VK_CHECK(createBuffer(physicalDevice, device, bufferSize, usageFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, buffer, bufferMemory));
+            VK_CHECK(copyBuffer(device, deviceContext.getGraphicsQueue(), commandPool, stagingBuffer, buffer, bufferSize));
+
+            vkDestroyBuffer(device, stagingBuffer, nullptr);
+            vkFreeMemory(device, stagingBufferMemory, nullptr);
+        }
+        ~DeviceLocalBufferContext()
+        {
+            vkDeviceWaitIdle(device);
+            vkFreeMemory(device, bufferMemory, nullptr);
+            vkDestroyBuffer(device, buffer, nullptr);
+            std::cout << "Destroy DeviceLocalBufferContext\n";
+        }
+        VkBuffer getBuffer() const { return buffer; }
+    private:
+        VkDevice device;
+        VkBuffer buffer;
+        VkDeviceMemory bufferMemory;
+    };
+
+    // NOTE: does not need to be rebuilt at runtime
+    template <typename T>
+    class HostVisibleBufferContext
+    {
+    public:
+        HostVisibleBufferContext(const DeviceContext& deviceContext) : device(deviceContext.getDevice())
+        {
+            VkDeviceSize bufferSize = sizeof(T);
+            VK_CHECK(createBuffer(deviceContext.getPhysicalDevice(), device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, buffer, bufferMemory));
+            VK_CHECK(vkMapMemory(device, bufferMemory, 0, bufferSize, 0, &bufferMapped));
+        }
+        ~HostVisibleBufferContext()
+        {
+            vkDeviceWaitIdle(device);
+            vkUnmapMemory(device, bufferMemory);
+            vkDestroyBuffer(device, buffer, nullptr);
+            vkFreeMemory(device, bufferMemory, nullptr);
+            std::cout << "Destroy HostVisibleBufferContext\n";
+        }
+        VkDescriptorBufferInfo getVkDescriptorBufferInfos() const
+        {
+            VkDescriptorBufferInfo descriptorBufferInfo{};
+            descriptorBufferInfo.buffer = buffer;
+            descriptorBufferInfo.offset = 0;
+            descriptorBufferInfo.range = sizeof(T);
+            return descriptorBufferInfo;
+        }
+        void memcpy(const T* data) const { std::memcpy(bufferMapped, data, sizeof(T)); }
+    private:
+        VkDevice device;
+        VkBuffer buffer;
+        VkDeviceMemory bufferMemory;
+        void* bufferMapped;
+    };
 
     // struct Camera
     // {

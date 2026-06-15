@@ -272,58 +272,12 @@ int main()
         vertices[i].normal = normals[i];
     }
 
-    // TODO
-    // - make it easy to create different types of buffers
-    // create (vertex) VkBuffer
-    VkBuffer vertexBuffer;
-    VkDeviceMemory vertexBufferMemory;
-    {
-        VkPhysicalDevice physicalDevice = deviceContext.getPhysicalDevice();
-        VkDevice device = deviceContext.getDevice();
-        VkDeviceSize vertexBufferSize = sizeof(Vertex) * vertices.size();
+    // create vertex buffer
+    silk::DeviceLocalBufferContext<Vertex> vertexBufferContext(deviceContext, commandPool, vertices, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        VK_CHECK(silk::createBuffer(physicalDevice, device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory));
-
-        void* data;
-        vkMapMemory(device, stagingBufferMemory, 0, vertexBufferSize, 0, &data);
-            memcpy(data, vertices.data(), static_cast<size_t>(vertexBufferSize));
-        vkUnmapMemory(device, stagingBufferMemory);
-
-        VK_CHECK(silk::createBuffer(physicalDevice, device, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory));
-
-        VK_CHECK(silk::copyBuffer(device, deviceContext.getGraphicsQueue(), commandPool, stagingBuffer, vertexBuffer, vertexBufferSize));
-
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkFreeMemory(device, stagingBufferMemory, nullptr);
-    }
-
+    // create index buffer
     const std::vector<uint16_t> indices = silk::getGLTFModelIndices(model);
-
-    // create (index) VkBuffer
-    VkBuffer indexBuffer;
-    VkDeviceMemory indexBufferMemory;
-    {
-        VkPhysicalDevice physicalDevice = deviceContext.getPhysicalDevice();
-        VkDevice device = deviceContext.getDevice();
-        VkDeviceSize indexBufferSize = sizeof(uint16_t) * indices.size(); 
-
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        VK_CHECK(silk::createBuffer(physicalDevice, device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory));
-
-        void* data;
-        vkMapMemory(device, stagingBufferMemory, 0, indexBufferSize, 0, &data);
-            memcpy(data, indices.data(), static_cast<size_t>(indexBufferSize));
-        vkUnmapMemory(device, stagingBufferMemory);
-
-        VK_CHECK(silk::createBuffer(physicalDevice, device, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory));
-        VK_CHECK(silk::copyBuffer(device, deviceContext.getGraphicsQueue(), commandPool, stagingBuffer, indexBuffer, indexBufferSize));
-
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkFreeMemory(device, stagingBufferMemory, nullptr);
-    }
+    silk::DeviceLocalBufferContext<uint16_t> indexBufferContext(deviceContext, commandPool, indices, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
     // create (instance) VkBuffer
     const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -352,23 +306,12 @@ int main()
         alignas(16) glm::mat4 proj;
     };
 
-    // create (uniform) VkBuffer
-    std::vector<VkBuffer> uniformBuffers;
-    std::vector<VkDeviceMemory> uniformBuffersMemory;
-    std::vector<void*> uniformBuffersMapped;
+    // create uniform buffer
+    std::vector<silk::HostVisibleBufferContext<CameraUBO>> cameraUBOBufferContexts;
+    cameraUBOBufferContexts.reserve(MAX_FRAMES_IN_FLIGHT);
+    for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
     {
-        uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-        uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-        uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
-
-        VkPhysicalDevice physicalDevice = deviceContext.getPhysicalDevice();
-        VkDevice device = deviceContext.getDevice();
-        VkDeviceSize bufferSize = sizeof(CameraUBO);
-        for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
-        {
-            VK_CHECK(silk::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]));
-            VK_CHECK(vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]));
-        }
+        cameraUBOBufferContexts.emplace_back(deviceContext);
     }
 
     // create VkDescriptorPool
@@ -402,10 +345,7 @@ int main()
 
         for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
         {
-            VkDescriptorBufferInfo descriptorBufferInfo{};
-            descriptorBufferInfo.buffer = uniformBuffers[i];
-            descriptorBufferInfo.offset = 0;
-            descriptorBufferInfo.range = sizeof(CameraUBO);
+            std::vector<VkDescriptorBufferInfo> descriptorBufferInfos = { cameraUBOBufferContexts[i].getVkDescriptorBufferInfos() };
 
             VkWriteDescriptorSet writeDescriptorSet{};
             writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -413,8 +353,8 @@ int main()
             writeDescriptorSet.dstBinding = 0;
             writeDescriptorSet.dstArrayElement = 0;
             writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            writeDescriptorSet.descriptorCount = 1;
-            writeDescriptorSet.pBufferInfo = &descriptorBufferInfo;
+            writeDescriptorSet.descriptorCount = descriptorBufferInfos.size();
+            writeDescriptorSet.pBufferInfo = descriptorBufferInfos.data();
 
             vkUpdateDescriptorSets(deviceContext.getDevice(), 1, &writeDescriptorSet, 0, nullptr);
         }
@@ -516,7 +456,7 @@ int main()
                 }
                 cameraUBO.view = glm::lookAt(cameraPosition, CENTER, UP);
 
-                memcpy(uniformBuffersMapped[currentFrame], &cameraUBO, sizeof(CameraUBO));
+                cameraUBOBufferContexts[currentFrame].memcpy(&cameraUBO);
             }
 
             // update ModelPC
@@ -589,11 +529,11 @@ int main()
                     scissor.extent = swapchainContext.getExtent();
                     vkCmdSetScissor(commandBuffers[currentFrame], 0, 1, &scissor);
 
-                    VkBuffer vertexBuffers[] = { vertexBuffer };
+                    VkBuffer vertexBuffers[] = { vertexBufferContext.getBuffer() };
                     VkDeviceSize offsets[] = { 0 };
                     vkCmdBindVertexBuffers(commandBuffers[currentFrame], 0, 1, vertexBuffers, offsets);
 
-                    vkCmdBindIndexBuffer(commandBuffers[currentFrame], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+                    vkCmdBindIndexBuffer(commandBuffers[currentFrame], indexBufferContext.getBuffer(), 0, VK_INDEX_TYPE_UINT16);
 
                     vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineContext.getPipelineLayout(), 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
@@ -665,27 +605,12 @@ int main()
     // destroy VkDescriptorPool
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
-    // destroy (uniform) VkBuffer
-    for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
-    {
-        vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
-        vkDestroyBuffer(device, uniformBuffers[i], nullptr);
-    }
-
     // destroy (instance) VkBuffer
     // for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
     // {
     //     vkFreeMemory(device, instanceBuffersMemory[i], nullptr);
     //     vkDestroyBuffer(device, instanceBuffers[i], nullptr);
     // }
-
-    // destroy (index) VkBuffer
-    vkFreeMemory(device, indexBufferMemory, nullptr);
-    vkDestroyBuffer(device, indexBuffer, nullptr);
-
-    // destroy (vertex) VkBuffer
-    vkFreeMemory(device, vertexBufferMemory, nullptr);
-    vkDestroyBuffer(device, vertexBuffer, nullptr);
 
     // destroy VkCommandPool
     vkDestroyCommandPool(device, commandPool, nullptr);

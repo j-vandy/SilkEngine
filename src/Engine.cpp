@@ -27,6 +27,29 @@ namespace silk
         return surfaceFormats[0];
     }
 
+    VkFormat getDepthFormat(const VkPhysicalDevice physicalDevice)
+    {
+        const std::vector<VkFormat> depthFormatCandidates =
+        {
+            VK_FORMAT_D32_SFLOAT,
+            VK_FORMAT_D32_SFLOAT_S8_UINT,
+            VK_FORMAT_D24_UNORM_S8_UINT
+        };
+
+        for (VkFormat format : depthFormatCandidates)
+        {
+            VkFormatProperties formatProperties;
+            vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &formatProperties);
+
+            if (formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+            {
+                return format;
+            }
+        }
+
+        throw std::runtime_error("ERROR: failed to find depth format!");
+    }
+
     std::vector<char> readFile(const std::string& filename)
     {
         std::ifstream file(filename, std::ios::ate | std::ios::binary);
@@ -137,8 +160,7 @@ namespace silk
         return std::vector<uint16_t>(data, data + accessorView.count);
     }
 
-
-    VkResult allocateMemory(const VkPhysicalDevice physicalDevice, const VkDevice device, const VkMemoryRequirements& memoryRequirements, const VkMemoryPropertyFlags& propertyFlags, VkDeviceMemory& deviceMemory)
+    VkResult allocateMemory(const VkPhysicalDevice physicalDevice, const VkDevice device, const VkMemoryRequirements &memoryRequirements, const VkMemoryPropertyFlags &propertyFlags, VkDeviceMemory &deviceMemory)
     {
         VkMemoryAllocateInfo memoryAllocateInfo{};
         memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -170,7 +192,7 @@ namespace silk
         return vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &deviceMemory);
     }
 
-    VkResult createBuffer(const VkPhysicalDevice physicalDevice, const VkDevice device, const VkDeviceSize size, const VkBufferUsageFlags& usageFlags, const VkMemoryPropertyFlags& propertyFlags, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
+    VkResult createBuffer(const VkPhysicalDevice physicalDevice, const VkDevice device, const VkDeviceSize size, const VkBufferUsageFlags &usageFlags, const VkMemoryPropertyFlags &propertyFlags, VkBuffer &buffer, VkDeviceMemory &bufferMemory)
     {
         VkBufferCreateInfo bufferCreateInfo{};
         bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -250,29 +272,6 @@ namespace silk
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 
         return VK_SUCCESS;
-    }
-
-    VkFormat getDepthFormat(const VkPhysicalDevice physicalDevice)
-    {
-        const std::vector<VkFormat> depthFormatCandidates =
-        {
-            VK_FORMAT_D32_SFLOAT,
-            VK_FORMAT_D32_SFLOAT_S8_UINT,
-            VK_FORMAT_D24_UNORM_S8_UINT
-        };
-
-        for (VkFormat format : depthFormatCandidates)
-        {
-            VkFormatProperties formatProperties;
-            vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &formatProperties);
-
-            if (formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
-            {
-                return format;
-            }
-        }
-
-        throw std::runtime_error("ERROR: failed to find depth format!");
     }
 
     VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, [[maybe_unused]] VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, [[maybe_unused]] void* pUserData)
@@ -496,6 +495,8 @@ namespace silk
 
     DeviceContext::~DeviceContext()
     {
+        vkDeviceWaitIdle(device);
+
         // destroy VkDevice
         vkDestroyDevice(device, nullptr);
 
