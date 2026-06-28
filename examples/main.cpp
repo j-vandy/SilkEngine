@@ -73,22 +73,18 @@ void updateCursorDelta(GLFWwindow* window)
 }
 
 // TODO
-// Only create API functions or data structures whenever there's Vulkan obj reconstructions or code duplication across examples
-// - Duck Model Viewer Example (6/7)
-//      - Add texturing (6/3)
-//      - Blinn-Phong shading (6/4)
-//      - Adjustable specular value (6/4)
-// - Check for depricated code on Vulkan website (6/10)
-// - 2D paint (6/21)
-//      - Get previous & current frame's mouse position (6/11)
-//      - Draw capsule (6/14)
-//      - Control diameter with +/- (6/16)
-//      - Swap color with numbers (6/18)
+// - Duck Model Viewer Example
+//      - Blinn-Phong shading
+//      - Adjustable specular value
+//      - Improve API: rework buffers, tex images, and depth buffer (probably into resources, memory, and upload)
+// - Check for depricated code on Vulkan website
+// - 2D paint
+//      - Get previous & current frame's mouse position
+//      - Draw capsule
+//      - Control diameter with +/- or scroll
+//      - Swap color with numbers
 //      - Improve API
-//          - Creating different kinds of buffers
-//          - Setting buffer/shader uniform values
-// - flatland RC (7/13)
-// - bilinear fix or holographic RC
+// - flatland RC or holographic RC (7/13)
 // - Improve API
 // - screen space RC, Input System, "Phox" Engine, ...
 
@@ -199,13 +195,20 @@ int main()
         uboLayoutBinding.binding = 0;
         uboLayoutBinding.descriptorCount = 1;
         uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uboLayoutBinding.pImmutableSamplers = nullptr;
         uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+        VkDescriptorSetLayoutBinding samplerBinding{};
+        samplerBinding.binding = 1;
+        samplerBinding.descriptorCount = 1;
+        samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        std::vector<VkDescriptorSetLayoutBinding> bindings{ uboLayoutBinding, samplerBinding };
 
         VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{};
         descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        descriptorSetLayoutCreateInfo.bindingCount = 1;
-        descriptorSetLayoutCreateInfo.pBindings = &uboLayoutBinding;
+        descriptorSetLayoutCreateInfo.bindingCount = bindings.size();
+        descriptorSetLayoutCreateInfo.pBindings = bindings.data();
 
         VK_CHECK(vkCreateDescriptorSetLayout(deviceContext.getDevice(), &descriptorSetLayoutCreateInfo, nullptr, &descriptorSetLayout));
     }
@@ -214,6 +217,7 @@ int main()
     {
         glm::vec3 position;
         glm::vec3 normal;
+        glm::vec2 uv;
 
         static VkVertexInputBindingDescription getBindingDescription()
         {
@@ -229,6 +233,7 @@ int main()
             return {
                 { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position) },
                 { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal) },
+                { 2, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, uv) },
             };
         }
     };
@@ -262,23 +267,36 @@ int main()
     const std::string FILENAME = ".\\model\\Duck.gltf";
     const tinygltf::Model model = silk::loadGLTFModel(FILENAME);
 
+    // create vertex buffer
     const std::vector<glm::vec3> positions = silk::getGLTFModelPositions(model);
     const std::vector<glm::vec3> normals = silk::getGLTFModelNormals(model);
+    const std::vector<glm::vec2> uvs = silk::getGLTFModelTexCoords(model);
 
     std::vector<Vertex> vertices(positions.size());
     for (size_t i = 0; i < positions.size(); i++)
     {
         vertices[i].position = positions[i];
         vertices[i].normal = normals[i];
+        vertices[i].uv = uvs[i];
     }
 
-    // create vertex buffer
     silk::DeviceLocalBufferContext<Vertex> vertexBufferContext(deviceContext, commandPool, vertices, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
     // create index buffer
     const std::vector<uint16_t> indices = silk::getGLTFModelIndices(model);
     silk::DeviceLocalBufferContext<uint16_t> indexBufferContext(deviceContext, commandPool, indices, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
+    // create texture image
+    tinygltf::Image tinyImage;
+    {
+        const auto material = model.materials[model.meshes[0].primitives[0].material];
+        int textureIndex = material.pbrMetallicRoughness.baseColorTexture.index;
+        const auto texture = model.textures[textureIndex];
+        tinyImage = model.images[texture.source];
+    }
+
+    silk::DeviceLocalImageContext albedoTexContext(deviceContext, commandPool, tinyImage);
+    
     // create (instance) VkBuffer
     const int MAX_FRAMES_IN_FLIGHT = 2;
     // uint32_t maxInstances = 100;
@@ -317,21 +335,27 @@ int main()
     // create VkDescriptorPool
     VkDescriptorPool descriptorPool;
     {
-        VkDescriptorPoolSize descriptorPoolSize{};
-        descriptorPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptorPoolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        VkDescriptorPoolSize uboDescriptorPoolSize{};
+        uboDescriptorPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uboDescriptorPoolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+        VkDescriptorPoolSize samplerDescriptorPoolSize{};
+        samplerDescriptorPoolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerDescriptorPoolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+        std::vector<VkDescriptorPoolSize> poolSizes{ uboDescriptorPoolSize, samplerDescriptorPoolSize };
 
         VkDescriptorPoolCreateInfo descriptorPoolCreateInfo{};
         descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        descriptorPoolCreateInfo.poolSizeCount = 1;
-        descriptorPoolCreateInfo.pPoolSizes = &descriptorPoolSize;
+        descriptorPoolCreateInfo.poolSizeCount = poolSizes.size();
+        descriptorPoolCreateInfo.pPoolSizes = poolSizes.data();
         descriptorPoolCreateInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
         VK_CHECK(vkCreateDescriptorPool(deviceContext.getDevice(), &descriptorPoolCreateInfo, nullptr, &descriptorPool));
     }
 
     // create VkDescriptorSets
-    std::vector<VkDescriptorSet> descriptorSets;
+    std::vector<VkDescriptorSet> descriptorSets(MAX_FRAMES_IN_FLIGHT);
     {
         std::vector<VkDescriptorSetLayout> descriptorSetLayouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
         VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
@@ -340,23 +364,37 @@ int main()
         descriptorSetAllocateInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
         descriptorSetAllocateInfo.pSetLayouts = descriptorSetLayouts.data();
 
-        descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
         VK_CHECK(vkAllocateDescriptorSets(deviceContext.getDevice(), &descriptorSetAllocateInfo, descriptorSets.data()));
 
         for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
         {
-            std::vector<VkDescriptorBufferInfo> descriptorBufferInfos = { cameraUBOBufferContexts[i].getVkDescriptorBufferInfos() };
+            std::vector<VkDescriptorBufferInfo> descriptorBufferInfos{ cameraUBOBufferContexts[i].getVkDescriptorBufferInfos() };
 
-            VkWriteDescriptorSet writeDescriptorSet{};
-            writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            writeDescriptorSet.dstSet = descriptorSets[i];
-            writeDescriptorSet.dstBinding = 0;
-            writeDescriptorSet.dstArrayElement = 0;
-            writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            writeDescriptorSet.descriptorCount = descriptorBufferInfos.size();
-            writeDescriptorSet.pBufferInfo = descriptorBufferInfos.data();
+            VkWriteDescriptorSet uboWriteDescriptorSet{};
+            uboWriteDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            uboWriteDescriptorSet.dstSet = descriptorSets[i];
+            uboWriteDescriptorSet.dstBinding = 0;
+            uboWriteDescriptorSet.dstArrayElement = 0;
+            uboWriteDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            uboWriteDescriptorSet.descriptorCount = descriptorBufferInfos.size();
+            uboWriteDescriptorSet.pBufferInfo = descriptorBufferInfos.data();
 
-            vkUpdateDescriptorSets(deviceContext.getDevice(), 1, &writeDescriptorSet, 0, nullptr);
+            VkDescriptorImageInfo imageInfo{};
+            imageInfo.sampler = albedoTexContext.getSampler();
+            imageInfo.imageView = albedoTexContext.getImageView();
+            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+            VkWriteDescriptorSet imageWriteDescriptorSet{};
+            imageWriteDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            imageWriteDescriptorSet.dstSet = descriptorSets[i];
+            imageWriteDescriptorSet.dstBinding = 1;
+            imageWriteDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            imageWriteDescriptorSet.descriptorCount = 1;
+            imageWriteDescriptorSet.pImageInfo = &imageInfo;
+
+            std::vector<VkWriteDescriptorSet> writeDescriptorSets{ uboWriteDescriptorSet, imageWriteDescriptorSet };
+
+            vkUpdateDescriptorSets(deviceContext.getDevice(), writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
         }
     }
 

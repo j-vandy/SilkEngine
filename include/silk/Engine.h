@@ -1,7 +1,5 @@
 #pragma once
 
-// #include "ECS.h"
-
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -19,7 +17,7 @@
 
 namespace silk
 {
-    constexpr std::string toString(VkResult result)
+    constexpr const char* toString(VkResult result)
     {
         switch (result)
         {
@@ -100,6 +98,8 @@ namespace silk
     std::vector<glm::vec3> getGLTFModelPositions(const tinygltf::Model& model);
 
     std::vector<glm::vec3> getGLTFModelNormals(const tinygltf::Model& model);
+
+    std::vector<glm::vec2> getGLTFModelTexCoords(const tinygltf::Model& model);
 
     std::vector<uint16_t> getGLTFModelIndices(const tinygltf::Model& model);
 
@@ -327,6 +327,22 @@ namespace silk
         VkBuffer buffer;
         VkDeviceMemory bufferMemory;
         void* bufferMapped;
+    };
+
+    // NOTE: does not need to be rebuilt at runtime
+    class DeviceLocalImageContext
+    {
+    public:
+        DeviceLocalImageContext(const DeviceContext& deviceContext, const VkCommandPool commandPool, const tinygltf::Image& tinyImage);
+        ~DeviceLocalImageContext();
+        VkSampler getSampler() const;
+        VkImageView getImageView() const;
+    private:
+        VkDevice device;
+        VkImage image;
+        VkDeviceMemory deviceMemory;
+        VkImageView imageView;
+        VkSampler sampler;
     };
 
     // struct Camera

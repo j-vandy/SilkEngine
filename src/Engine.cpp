@@ -131,27 +131,26 @@ namespace silk
         };
     }
 
-    std::vector<glm::vec3> readVec3(const AccessorView& accessorView)
+    template <typename T>
+    std::vector<T> readAccessorView(const AccessorView& accessorView)
     {
-        std::vector<glm::vec3> out(accessorView.count);
+        std::vector<T> out(accessorView.count);
 
         for (size_t i = 0; i < accessorView.count; i++)
         {
-            memcpy(&out[i], accessorView.data + i * accessorView.stride, sizeof(glm::vec3));
+            memcpy(&out[i], accessorView.data + i * accessorView.stride, sizeof(T));
         }
 
         return out;
     }
 
-    std::vector<glm::vec3> getGLTFModelPositions(const tinygltf::Model& model)
-    {
-        return readVec3(getAccessorView(model, "POSITION"));
-    }
+    std::vector<glm::vec3> getGLTFModelPositions(const tinygltf::Model& model) { return readAccessorView<glm::vec3>(getAccessorView(model, "POSITION")); }
 
-    std::vector<glm::vec3> getGLTFModelNormals(const tinygltf::Model& model)
-    {
-        return readVec3(getAccessorView(model, "NORMAL"));
-    }
+    std::vector<glm::vec3> getGLTFModelNormals(const tinygltf::Model& model) { return readAccessorView<glm::vec3>(getAccessorView(model, "NORMAL")); }
+
+    std::vector<glm::vec2> getGLTFModelTexCoords(const tinygltf::Model& model) { return readAccessorView<glm::vec2>(getAccessorView(model, "TEXCOORD_0")); }
+
+    // TODO load image
 
     std::vector<uint16_t> getGLTFModelIndices(const tinygltf::Model& model)
     {
@@ -901,6 +900,177 @@ namespace silk
     VkPipelineLayout PipelineContext::getPipelineLayout() const { return pipelineLayout; }
 
     VkPipeline PipelineContext::getPipeline() const { return pipeline; }
+
+    DeviceLocalImageContext::DeviceLocalImageContext(const DeviceContext& deviceContext, const VkCommandPool commandPool, const tinygltf::Image& tinyImage) : device(deviceContext.getDevice())
+    {
+        const VkPhysicalDevice physicalDevice = deviceContext.getPhysicalDevice();
+
+        // === create VkImage ===
+        VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+        VkImageCreateInfo imageCreateInfo{};
+        imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageCreateInfo.extent.width = tinyImage.width;
+        imageCreateInfo.extent.height = tinyImage.height;
+        imageCreateInfo.extent.depth = 1;
+        imageCreateInfo.mipLevels = 1;
+        imageCreateInfo.arrayLayers = 1;
+        imageCreateInfo.format = format;
+        imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VK_CHECK(vkCreateImage(device, &imageCreateInfo, nullptr, &image));
+
+        VkMemoryRequirements memoryRequirements;
+        vkGetImageMemoryRequirements(device, image, &memoryRequirements);
+
+        VkMemoryPropertyFlagBits propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        VK_CHECK(allocateMemory(physicalDevice, device, memoryRequirements, propertyFlags, deviceMemory));
+
+        VK_CHECK(vkBindImageMemory(device, image, deviceMemory, 0));
+
+        // create staging buffer
+        VkDeviceSize imageSize = tinyImage.bits / 8 * tinyImage.component * tinyImage.width * tinyImage.height;
+        
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        VK_CHECK(createBuffer(physicalDevice, device, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory));
+
+        void *stagingData;
+        vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &stagingData);
+        memcpy(stagingData, tinyImage.image.data(), static_cast<size_t>(imageSize));
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        // record command buffer
+        VkCommandBufferAllocateInfo commandBufferAllocateInfo{};
+        commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        commandBufferAllocateInfo.commandPool = commandPool;
+        commandBufferAllocateInfo.commandBufferCount = 1;
+
+        VkCommandBuffer commandBuffer;
+        VK_CHECK(vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, &commandBuffer));
+
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+        VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
+
+            // transition: UNDEFINED -> TRANSFER_DST_OPTIMALA
+            {
+                VkImageMemoryBarrier imageMemoryBarrier{};
+                imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                imageMemoryBarrier.srcAccessMask = 0;
+                imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                imageMemoryBarrier.image = image;
+                imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+                imageMemoryBarrier.subresourceRange.levelCount = 1;
+                imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
+                imageMemoryBarrier.subresourceRange.layerCount = 1;
+
+                vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+            }
+           
+            // copy buffer to image
+            VkBufferImageCopy bufferImageCopy{};
+            bufferImageCopy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            bufferImageCopy.imageSubresource.layerCount = 1;
+            bufferImageCopy.imageExtent = VkExtent3D {
+                static_cast<uint32_t>(tinyImage.width),
+                static_cast<uint32_t>(tinyImage.height),
+                1
+            };
+
+            vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopy);
+
+            // transition: TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL
+            {
+                VkImageMemoryBarrier imageMemoryBarrier{};
+                imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                imageMemoryBarrier.image = image;
+                imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+                imageMemoryBarrier.subresourceRange.levelCount = 1;
+                imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
+                imageMemoryBarrier.subresourceRange.layerCount = 1;
+
+                vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+            }
+
+        VK_CHECK(vkEndCommandBuffer(commandBuffer));
+
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffer;
+
+        VkQueue graphicsQueue = deviceContext.getGraphicsQueue();
+        VK_CHECK(vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE));
+        VK_CHECK(vkQueueWaitIdle(graphicsQueue));
+
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+
+        vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+
+        // === create VkImageView ===
+        VkImageViewCreateInfo imageViewCreateInfo{};
+        imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        imageViewCreateInfo.image = image;
+        imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        imageViewCreateInfo.format = format;
+        imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+        imageViewCreateInfo.subresourceRange.levelCount = 1;
+        imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+        imageViewCreateInfo.subresourceRange.layerCount = 1;
+
+        VK_CHECK(vkCreateImageView(device, &imageViewCreateInfo, nullptr, &imageView));
+
+        // === create VkSampler ===
+        VkSamplerCreateInfo samplerCreateInfo{};
+        samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
+        samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+        samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerCreateInfo.maxAnisotropy = 1.0f;
+        samplerCreateInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        samplerCreateInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+
+        VK_CHECK(vkCreateSampler(device, &samplerCreateInfo, nullptr, &sampler));
+    }
+
+    DeviceLocalImageContext::~DeviceLocalImageContext()
+    {
+        vkDeviceWaitIdle(device);
+        vkDestroySampler(device, sampler, nullptr);
+        vkDestroyImageView(device, imageView, nullptr);
+        vkFreeMemory(device, deviceMemory, nullptr);
+        vkDestroyImage(device, image, nullptr);
+        std::cout << "Destroy DeviceLocalImageContext\n";
+    }
+
+    VkSampler DeviceLocalImageContext::getSampler() const { return sampler; }
+
+    VkImageView DeviceLocalImageContext::getImageView() const { return imageView; }
 
     // glm::mat4 Camera::getOrthoMatrix(uint32_t screenWidth, uint32_t screenHeight) const
     // {
