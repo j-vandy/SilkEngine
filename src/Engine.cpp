@@ -1056,6 +1056,8 @@ namespace silk
         samplerCreateInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 
         VK_CHECK(vkCreateSampler(device, &samplerCreateInfo, nullptr, &sampler));
+
+        std::cout << "Create DeviceLocalImageContext\n";
     }
 
     DeviceLocalImageContext::~DeviceLocalImageContext()

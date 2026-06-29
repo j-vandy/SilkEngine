@@ -74,16 +74,26 @@ void updateCursorDelta(GLFWwindow* window)
 
 // TODO
 // - Duck Model Viewer Example
-//      - Blinn-Phong shading
-//      - Adjustable specular value
-//      - Improve API: rework buffers, tex images, and depth buffer (probably into resources, memory, and upload)
-// - Check for depricated code on Vulkan website
+//      - Device Layers
+//      - Physical Device Queries
+//      - Version Macros
+//      - Render Pass Function
+//      - Render Pass Objects
+//      - VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+//      - VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
+//      - VK_PIPELINE_STAGE_VERTEX_INPUT_BIT
+//      - VK_PIPELINE_STAGE_TRANSFER_BIT
+//      - VK_ACCESS_SHADRE_READ_BIT
+//      - VK_ACCESS_SHADER_WRITE_BIT
+//      - Pipeline Objects
+//      - Improve API: FIND DUPLICATED CODE! rework buffers, tex images, and depth buffer (probably into resources, memory, and upload)
+//      - Create a ducky directory in examples (make room for paint)
 // - 2D paint
 //      - Get previous & current frame's mouse position
 //      - Draw capsule
 //      - Control diameter with +/- or scroll
 //      - Swap color with numbers
-//      - Improve API
+//      - Improve API: minimize code duplication
 // - flatland RC or holographic RC (7/13)
 // - Improve API
 // - screen space RC, Input System, "Phox" Engine, ...
@@ -240,8 +250,8 @@ int main()
 
     struct ModelPC
     {
-        glm::mat4 model = glm::mat4(1.0f);;
-        glm::mat4 normal = glm::mat4(1.0f);;
+        glm::mat4 model = glm::mat4(1.0f);
+        glm::mat4 normal = glm::mat4(1.0f);
 
         static VkShaderStageFlags getStageFlags() { return VK_SHADER_STAGE_VERTEX_BIT; }
     };
@@ -444,16 +454,15 @@ int main()
     const float FOVY = 60.0f;
     const float Z_NEAR = 0.1f;
     const float Z_FAR = 10000.0f;
-    const glm::vec3 CENTER(0.0f);
-    const glm::vec3 UP(0.0f, 1.0f, 0.0f);
+    const glm::vec3 VEC3_ORIGIN(0.0f);
+    const glm::vec3 VEC3_UP(0.0f, 1.0f, 0.0f);
+    const glm::vec3 VEC3_RIGHT(1.0f, 0.0f, 0.0f);
     const auto START_TIME = std::chrono::high_resolution_clock::now();
     const float ROT_SPEED = 0.5f;
 
     ModelPC modelPC{};
     float modelYaw = 0.0f, modelPitch = 0.0f;
-    const glm::vec3 VEC3_UP(0.0f, 1.0f, 0.0f);
-    const glm::vec3 VEC3_RIGHT(1.0f, 0.0f, 0.0f);
-
+    
     // run
     {
         VkDevice device = deviceContext.getDevice();
@@ -476,7 +485,7 @@ int main()
 
             updateCursorDelta(window);
 
-            // update camera UBO
+            // update UBO + push constant
             {
                 CameraUBO cameraUBO{};
 
@@ -492,20 +501,20 @@ int main()
 
                     cameraPosition = sphericalToCartesian(camRadius, theta, phi);
                 }
-                cameraUBO.view = glm::lookAt(cameraPosition, CENTER, UP);
+                cameraUBO.view = glm::lookAt(cameraPosition, VEC3_ORIGIN, VEC3_UP);
 
                 cameraUBOBufferContexts[currentFrame].memcpy(&cameraUBO);
-            }
 
-            // update ModelPC
-            if (isRightMouseButtonDown)
-            {
-                modelYaw += cursorDeltaX * ROT_SPEED;
-                modelPitch += cursorDeltaY * ROT_SPEED;
-                modelPC.model = glm::mat4(1.0f);
-                modelPC.model = glm::rotate(modelPC.model, glm::radians(modelYaw), VEC3_UP);
-                modelPC.model = glm::rotate(modelPC.model, glm::radians(modelPitch), VEC3_RIGHT);
-                modelPC.normal = glm::transpose(glm::inverse(modelPC.model));
+                // update ModelPC
+                if (isRightMouseButtonDown)
+                {
+                    modelYaw += cursorDeltaX * ROT_SPEED;
+                    modelPitch += cursorDeltaY * ROT_SPEED;
+                    modelPC.model = glm::mat4(1.0f);
+                    modelPC.model = glm::rotate(modelPC.model, glm::radians(modelYaw), VEC3_UP);
+                    modelPC.model = glm::rotate(modelPC.model, glm::radians(modelPitch), VEC3_RIGHT);
+                }
+                modelPC.normal = glm::transpose(glm::inverse(cameraUBO.view * modelPC.model));
             }
 
             // draw frame

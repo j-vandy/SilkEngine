@@ -279,6 +279,7 @@ namespace silk
 
             vkDestroyBuffer(device, stagingBuffer, nullptr);
             vkFreeMemory(device, stagingBufferMemory, nullptr);
+            std::cout << "Create DeviceLocalBufferContext\n";
         }
         ~DeviceLocalBufferContext()
         {
@@ -304,6 +305,7 @@ namespace silk
             VkDeviceSize bufferSize = sizeof(T);
             VK_CHECK(createBuffer(deviceContext.getPhysicalDevice(), device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, buffer, bufferMemory));
             VK_CHECK(vkMapMemory(device, bufferMemory, 0, bufferSize, 0, &bufferMapped));
+            std::cout << "Create HostVisibleBufferContext\n";
         }
         ~HostVisibleBufferContext()
         {
