@@ -56,5 +56,6 @@ function(silk_compile_shader TARGET SHADER)
 endfunction()
 
 # silk consumers
-add_subdirectory(examples)
+add_subdirectory(examples/ducky)
+add_subdirectory(examples/paint)
 add_subdirectory(tests)

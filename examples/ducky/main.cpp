@@ -72,32 +72,6 @@ void updateCursorDelta(GLFWwindow* window)
     prevCursorY = static_cast<float>(currCursorY);
 }
 
-// TODO
-// - Duck Model Viewer Example
-//      - Device Layers
-//      - Physical Device Queries
-//      - Version Macros
-//      - Render Pass Function
-//      - Render Pass Objects
-//      - VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
-//      - VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
-//      - VK_PIPELINE_STAGE_VERTEX_INPUT_BIT
-//      - VK_PIPELINE_STAGE_TRANSFER_BIT
-//      - VK_ACCESS_SHADRE_READ_BIT
-//      - VK_ACCESS_SHADER_WRITE_BIT
-//      - Pipeline Objects
-//      - Improve API: FIND DUPLICATED CODE! rework buffers, tex images, and depth buffer (probably into resources, memory, and upload)
-//      - Create a ducky directory in examples (make room for paint)
-// - 2D paint
-//      - Get previous & current frame's mouse position
-//      - Draw capsule
-//      - Control diameter with +/- or scroll
-//      - Swap color with numbers
-//      - Improve API: minimize code duplication
-// - flatland RC or holographic RC (7/13)
-// - Improve API
-// - screen space RC, Input System, "Phox" Engine, ...
-
 int main()
 {
     // create glfw window
@@ -124,6 +98,7 @@ int main()
     silk::DeviceContext deviceContext(window, deviceContextCreateInfo);
 
     // create VkRenderPass
+    // TODO https://docs.vulkan.org/guide/latest/deprecated.html#render_pass_objects_replacement
     VkRenderPass renderPass;
     {
         VkSurfaceFormatKHR surfaceFormat = silk::getPhysicalDeviceSurfaceFormat(deviceContext.getPhysicalDevice(), deviceContext.getSurface());

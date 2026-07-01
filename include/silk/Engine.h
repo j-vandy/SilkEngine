@@ -143,6 +143,24 @@ namespace silk
         uint32_t presentQueueFamilyIndex;
     };
 
+    struct ImageViewContextCreateInfo
+    {
+        VkImage image;
+        VkFormat format;
+        VkImageAspectFlags aspectMask;
+    };
+
+    class ImageViewContext
+    {
+    public:
+        ImageViewContext(const VkDevice device, const ImageViewContextCreateInfo& imageViewCreateInfo);
+        ~ImageViewContext();
+        VkImageView getImageView() const;
+    private:
+        VkDevice device;
+        VkImageView imageView;
+    };
+    
     class SwapchainContext
     {
     public:
@@ -157,7 +175,7 @@ namespace silk
         VkDevice device;
         VkExtent2D extent;
         VkSwapchainKHR swapchain;
-        std::vector<VkImageView> swapchainImageViews;
+        std::vector<ImageViewContext> swapchainImageViews;
         VkImage depthImage;
         VkDeviceMemory depthImageMemory;
         VkImageView depthImageView;
@@ -343,7 +361,7 @@ namespace silk
         VkDevice device;
         VkImage image;
         VkDeviceMemory deviceMemory;
-        VkImageView imageView;
+        std::optional<ImageViewContext> imageViewContext;
         VkSampler sampler;
     };
 

@@ -150,8 +150,6 @@ namespace silk
 
     std::vector<glm::vec2> getGLTFModelTexCoords(const tinygltf::Model& model) { return readAccessorView<glm::vec2>(getAccessorView(model, "TEXCOORD_0")); }
 
-    // TODO load image
-
     std::vector<uint16_t> getGLTFModelIndices(const tinygltf::Model& model)
     {
         AccessorView accessorView = getAccessorView(model, "INDEX");
@@ -168,9 +166,12 @@ namespace silk
         // get memory type index
         uint32_t memoryTypeIndex = UINT32_MAX;
         {
-            VkPhysicalDeviceMemoryProperties memoryProperties;
-            vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
+            VkPhysicalDeviceMemoryProperties2 memoryProperties2{};
+            memoryProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
 
+            vkGetPhysicalDeviceMemoryProperties2(physicalDevice, &memoryProperties2);
+
+            const auto& memoryProperties = memoryProperties2.memoryProperties;
             for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++)
             {
                 if ((memoryRequirements.memoryTypeBits & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & propertyFlags) == propertyFlags)
@@ -293,7 +294,7 @@ namespace silk
         VkDebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo{};
         {
             // check validation layer support
-            if (createInfo.enableValidationLayers)
+            if (enableValidationLayers)
             {
                 uint32_t layerCount;
                 vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
@@ -315,10 +316,10 @@ namespace silk
             VkApplicationInfo applicationInfo{};
             applicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
             applicationInfo.pApplicationName = createInfo.applicationName;
-            applicationInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+            applicationInfo.applicationVersion = VK_MAKE_API_VERSION(0, 0, 1, 0);
             applicationInfo.pEngineName = "Silk Engine";
-            applicationInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-            applicationInfo.apiVersion = VK_API_VERSION_1_0;
+            applicationInfo.engineVersion = VK_MAKE_API_VERSION(0, 0, 1, 0);
+            applicationInfo.apiVersion = VK_API_VERSION_1_3;
 
             VkInstanceCreateInfo instanceCreateInfo{};
             instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -327,7 +328,7 @@ namespace silk
             uint32_t glfwExtensionCount = 0;
             const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
             std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-            if (createInfo.enableValidationLayers)
+            if (enableValidationLayers)
             {
                 extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
             }
@@ -335,7 +336,7 @@ namespace silk
             instanceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
             instanceCreateInfo.ppEnabledExtensionNames = extensions.data();
 
-            if (createInfo.enableValidationLayers)
+            if (enableValidationLayers)
             {
                 instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(createInfo.validationLayers.size());
                 instanceCreateInfo.ppEnabledLayerNames = createInfo.validationLayers.data();
@@ -357,7 +358,7 @@ namespace silk
         }
 
         // create VkDebugUtilsMessengerEXT
-        if (createInfo.enableValidationLayers)
+        if (enableValidationLayers)
         {
             auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
             if (func != nullptr)
@@ -409,8 +410,6 @@ namespace silk
                     {
                         break;
                     }
-
-                    i++;
                 }
 
                 // extension support
@@ -532,6 +531,35 @@ namespace silk
 
     uint32_t DeviceContext::getPresentQueueFamilyIndex() const { return presentQueueFamilyIndex; }
 
+    ImageViewContext::ImageViewContext(const VkDevice device, const ImageViewContextCreateInfo& createInfo) : device(device)
+    {
+        VkImageViewCreateInfo imageViewCreateInfo{};
+        imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        imageViewCreateInfo.image = createInfo.image;
+        imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        imageViewCreateInfo.format = createInfo.format;
+        imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.subresourceRange.aspectMask = createInfo.aspectMask;
+        imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+        imageViewCreateInfo.subresourceRange.levelCount = 1;
+        imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+        imageViewCreateInfo.subresourceRange.layerCount = 1;
+        VK_CHECK(vkCreateImageView(device, &imageViewCreateInfo, nullptr, &imageView));
+        std::cout << "Create ImageViewContext\n";
+    }
+
+    ImageViewContext::~ImageViewContext()
+    {
+        vkDeviceWaitIdle(device);
+        vkDestroyImageView(device, imageView, nullptr);
+        std::cout << "Destroy ImageViewContext\n";
+    }
+
+    VkImageView ImageViewContext::getImageView() const { return imageView; }
+
     SwapchainContext::SwapchainContext(GLFWwindow* window, const DeviceContext& deviceContext, VkRenderPass renderPass) : device(deviceContext.getDevice()) { create(window, deviceContext, renderPass); }
 
     SwapchainContext::~SwapchainContext() { destroy(); }
@@ -650,25 +678,15 @@ namespace silk
             swapchainImages.resize(imageCount);
             vkGetSwapchainImagesKHR(device, swapchain, &imageCount, swapchainImages.data());
 
-            swapchainImageViews.resize(imageCount);
+            swapchainImageViews.clear();
+            swapchainImageViews.reserve(imageCount);
             for (size_t i = 0; i < swapchainImages.size(); i++)
             {
-                VkImageViewCreateInfo imageViewCreateInfo{};
-                imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+                ImageViewContextCreateInfo imageViewCreateInfo{};
                 imageViewCreateInfo.image = swapchainImages[i];
-                imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
                 imageViewCreateInfo.format = surfaceFormat.format;
-                imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-                imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-                imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-                imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-                imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-                imageViewCreateInfo.subresourceRange.levelCount = 1;
-                imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
-                imageViewCreateInfo.subresourceRange.layerCount = 1;
-
-                VK_CHECK(vkCreateImageView(device, &imageViewCreateInfo, nullptr, &swapchainImageViews[i]));
+                imageViewCreateInfo.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                swapchainImageViews.emplace_back(device, imageViewCreateInfo);
             }
         }
 
@@ -721,9 +739,9 @@ namespace silk
         {
             framebuffers.resize(swapchainImageViews.size());
 
-            for (size_t i = 0; i < swapchainImageViews.size(); i++)
+            for (size_t i = 0; i < framebuffers.size(); i++)
             {
-                std::vector<VkImageView> attachments{ swapchainImageViews[i], depthImageView };
+                std::vector<VkImageView> attachments{ swapchainImageViews[i].getImageView(), depthImageView };
 
                 VkFramebufferCreateInfo framebufferCreateInfo{};
                 framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -756,18 +774,13 @@ namespace silk
         vkFreeMemory(device, depthImageMemory, nullptr);
         vkDestroyImage(device, depthImage, nullptr);
 
-        // destroy VkImageViews
-        for (auto imageView : swapchainImageViews)
-        {
-            vkDestroyImageView(device, imageView, nullptr);
-        }
-
         // destroy VkSwapchainKHR
         vkDestroySwapchainKHR(device, swapchain, nullptr);
 
         std::cout << "Destroy SwapchainContext\n";
     }
 
+    // TODO https://docs.vulkan.org/guide/latest/deprecated.html#pipelines_shader_objects_replacement
     PipelineContext::PipelineContext(VkDevice device, VkRenderPass renderPass, const PipelineContextCreateInfo& createInfo) : device(device)
     {
         // relative to binary dir
@@ -901,6 +914,34 @@ namespace silk
 
     VkPipeline PipelineContext::getPipeline() const { return pipeline; }
 
+    struct TransitionImageMemoryBarrierInfo
+    {
+        VkAccessFlags srcAccessMask;
+        VkAccessFlags dstAccessMask;
+        VkImageLayout oldLayout;
+        VkImageLayout newLayout;
+        VkPipelineStageFlags srcStageMask;
+        VkPipelineStageFlags dstStageMask;
+    };
+
+    void transitionImageMemoryBarrier(const VkCommandBuffer commandBuffer, const TransitionImageMemoryBarrierInfo& info, const VkImage image)
+    {
+        VkImageMemoryBarrier imageMemoryBarrier{};
+        imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        imageMemoryBarrier.srcAccessMask = info.srcAccessMask;
+        imageMemoryBarrier.dstAccessMask = info.dstAccessMask;
+        imageMemoryBarrier.oldLayout = info.oldLayout;
+        imageMemoryBarrier.newLayout = info.newLayout;
+        imageMemoryBarrier.image = image;
+        imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+        imageMemoryBarrier.subresourceRange.levelCount = 1;
+        imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
+        imageMemoryBarrier.subresourceRange.layerCount = 1;
+
+        vkCmdPipelineBarrier(commandBuffer, info.srcStageMask, info.dstStageMask, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+    }
+
     DeviceLocalImageContext::DeviceLocalImageContext(const DeviceContext& deviceContext, const VkCommandPool commandPool, const tinygltf::Image& tinyImage) : device(deviceContext.getDevice())
     {
         const VkPhysicalDevice physicalDevice = deviceContext.getPhysicalDevice();
@@ -959,23 +1000,18 @@ namespace silk
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
         VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
-
+            // TODO https://docs.vulkan.org/guide/latest/deprecated.html#top_of_pipe_replacement
             // transition: UNDEFINED -> TRANSFER_DST_OPTIMALA
             {
-                VkImageMemoryBarrier imageMemoryBarrier{};
-                imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                imageMemoryBarrier.srcAccessMask = 0;
-                imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-                imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-                imageMemoryBarrier.image = image;
-                imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
-                imageMemoryBarrier.subresourceRange.levelCount = 1;
-                imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
-                imageMemoryBarrier.subresourceRange.layerCount = 1;
-
-                vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+                TransitionImageMemoryBarrierInfo transitionImageMemoryBarrierInfo{
+                    0,
+                    VK_ACCESS_TRANSFER_WRITE_BIT,
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT
+                };
+                transitionImageMemoryBarrier(commandBuffer, transitionImageMemoryBarrierInfo, image);
             }
            
             // copy buffer to image
@@ -992,22 +1028,16 @@ namespace silk
 
             // transition: TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL
             {
-                VkImageMemoryBarrier imageMemoryBarrier{};
-                imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-                imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-                imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                imageMemoryBarrier.image = image;
-                imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
-                imageMemoryBarrier.subresourceRange.levelCount = 1;
-                imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
-                imageMemoryBarrier.subresourceRange.layerCount = 1;
-
-                vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+                TransitionImageMemoryBarrierInfo transitionImageMemoryBarrierInfo{
+                    VK_ACCESS_TRANSFER_WRITE_BIT,
+                    VK_ACCESS_SHADER_READ_BIT,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+                };
+                transitionImageMemoryBarrier(commandBuffer, transitionImageMemoryBarrierInfo, image);
             }
-
         VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
         VkSubmitInfo submitInfo{};
@@ -1025,22 +1055,11 @@ namespace silk
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 
         // === create VkImageView ===
-        VkImageViewCreateInfo imageViewCreateInfo{};
-        imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        imageViewCreateInfo.image = image;
-        imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        imageViewCreateInfo.format = format;
-        imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-        imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-        imageViewCreateInfo.subresourceRange.levelCount = 1;
-        imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
-        imageViewCreateInfo.subresourceRange.layerCount = 1;
-
-        VK_CHECK(vkCreateImageView(device, &imageViewCreateInfo, nullptr, &imageView));
+        ImageViewContextCreateInfo imageViewContextCreateInfo{};
+        imageViewContextCreateInfo.image = image;
+        imageViewContextCreateInfo.format = format;
+        imageViewContextCreateInfo.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        imageViewContext.emplace(device, imageViewContextCreateInfo);
 
         // === create VkSampler ===
         VkSamplerCreateInfo samplerCreateInfo{};
@@ -1064,7 +1083,6 @@ namespace silk
     {
         vkDeviceWaitIdle(device);
         vkDestroySampler(device, sampler, nullptr);
-        vkDestroyImageView(device, imageView, nullptr);
         vkFreeMemory(device, deviceMemory, nullptr);
         vkDestroyImage(device, image, nullptr);
         std::cout << "Destroy DeviceLocalImageContext\n";
@@ -1072,7 +1090,7 @@ namespace silk
 
     VkSampler DeviceLocalImageContext::getSampler() const { return sampler; }
 
-    VkImageView DeviceLocalImageContext::getImageView() const { return imageView; }
+    VkImageView DeviceLocalImageContext::getImageView() const { return imageViewContext.has_value() ? imageViewContext->getImageView() : VK_NULL_HANDLE; }
 
     // glm::mat4 Camera::getOrthoMatrix(uint32_t screenWidth, uint32_t screenHeight) const
     // {
