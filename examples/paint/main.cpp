@@ -1,3 +1,5 @@
+#include "silk/Engine.h"
+
 #include <iostream>
 
 // TODO
@@ -13,6 +15,16 @@
 // - screen space RC, Input System, "Phox" Engine, ...
 int main()
 {
-    std::cout << "Hello, world.\n";
+    const uint32_t WIDTH = 960;
+    const uint32_t HEIGHT = 960;
+    const char* APPLICATION_NAME = "Paint";
+    silk::WindowContext windowContext(WIDTH, HEIGHT, APPLICATION_NAME);
+
+    silk::DeviceContextCreateInfo deviceContextCreateInfo{};
+    deviceContextCreateInfo.applicationName = APPLICATION_NAME;
+
+    silk::DeviceContext deviceContext(windowContext.getWindow(), deviceContextCreateInfo);
+
+
     return EXIT_SUCCESS;
 }

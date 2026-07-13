@@ -74,28 +74,21 @@ void updateCursorDelta(GLFWwindow* window)
 
 int main()
 {
-    // create glfw window
     const uint32_t WIDTH = 960;
     const uint32_t HEIGHT = 960;
     const char* APPLICATION_NAME = "Rubber Ducky";
-    GLFWwindow* window;
-    {
-        glfwInit();
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        window = glfwCreateWindow(WIDTH, HEIGHT, APPLICATION_NAME, nullptr, nullptr);
-        // TODO
-        // glfwSetWindowUserPointer(window, this);
-        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
-    }
+    silk::WindowContext windowContext(WIDTH, HEIGHT, APPLICATION_NAME);
 
-    // added callbacks
-    glfwSetScrollCallback(window, scrollCallback);
-    glfwSetMouseButtonCallback(window, mouseButtonCallback);
+    // add callback
+    glfwSetFramebufferSizeCallback(windowContext.getWindow(), framebufferResizeCallback);
+    // glfwSetWindowUserPointer(windowContext.getWindow(), this);
+    glfwSetScrollCallback(windowContext.getWindow(), scrollCallback);
+    glfwSetMouseButtonCallback(windowContext.getWindow(), mouseButtonCallback);
 
     silk::DeviceContextCreateInfo deviceContextCreateInfo{};
     deviceContextCreateInfo.applicationName = APPLICATION_NAME;
 
-    silk::DeviceContext deviceContext(window, deviceContextCreateInfo);
+    silk::DeviceContext deviceContext(windowContext.getWindow(), deviceContextCreateInfo);
 
     // create VkRenderPass
     // TODO https://docs.vulkan.org/guide/latest/deprecated.html#render_pass_objects_replacement
@@ -171,7 +164,7 @@ int main()
     }
 
     // create SwapchainContext
-    silk::SwapchainContext swapchainContext(window, deviceContext, renderPass);
+    silk::SwapchainContext swapchainContext(windowContext.getWindow(), deviceContext, renderPass);
 
     // create VkDescriptorSetLayout
     VkDescriptorSetLayout descriptorSetLayout;
@@ -455,7 +448,7 @@ int main()
         const auto startTime = std::chrono::high_resolution_clock::now();
         auto previousTime = startTime;
         uint32_t currentFrame = 0;
-        while(!glfwWindowShouldClose(window))
+        while(!glfwWindowShouldClose(windowContext.getWindow()))
         {
             glfwPollEvents();
 
@@ -463,12 +456,8 @@ int main()
             auto currentTime = std::chrono::high_resolution_clock::now();
             float deltaTime = std::chrono::duration<float>(currentTime - previousTime).count();
             previousTime = currentTime;
-            // for (std::function<void(float)> fn : updateCallbacks)
-            // {
-            //     fn(deltaTime);
-            // }
 
-            updateCursorDelta(window);
+            updateCursorDelta(windowContext.getWindow());
 
             // update UBO + push constant
             {
@@ -511,7 +500,7 @@ int main()
 
                 if (result == VK_ERROR_OUT_OF_DATE_KHR)
                 {
-                    swapchainContext.recreate(window, deviceContext, renderPass);
+                    swapchainContext.recreate(windowContext.getWindow(), deviceContext, renderPass);
                     continue;
                 }
                 else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
@@ -608,7 +597,7 @@ int main()
                 if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized)
                 {
                     framebufferResized = false;
-                    swapchainContext.recreate(window, deviceContext, renderPass);
+                    swapchainContext.recreate(windowContext.getWindow(), deviceContext, renderPass);
                 }
                 else if (result != VK_SUCCESS)
                 {
@@ -637,13 +626,6 @@ int main()
     // destroy VkDescriptorPool
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
-    // destroy (instance) VkBuffer
-    // for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
-    // {
-    //     vkFreeMemory(device, instanceBuffersMemory[i], nullptr);
-    //     vkDestroyBuffer(device, instanceBuffers[i], nullptr);
-    // }
-
     // destroy VkCommandPool
     vkDestroyCommandPool(device, commandPool, nullptr);
 
@@ -652,10 +634,6 @@ int main()
 
     // destroy renderPass
     vkDestroyRenderPass(device, renderPass, nullptr);
-
-    // destroy glfw window
-    glfwDestroyWindow(window);
-    glfwTerminate();
 
     return EXIT_SUCCESS;
 }

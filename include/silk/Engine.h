@@ -109,6 +109,16 @@ namespace silk
 
     VkResult copyBuffer(const VkDevice device, const VkQueue graphicsQueue, const VkCommandPool commandPool, const VkBuffer srcBuffer, VkBuffer dstBuffer, const VkDeviceSize size);
 
+    class WindowContext
+    {
+    public:
+        WindowContext(float width, float height, const char* title);
+        ~WindowContext();
+        GLFWwindow* getWindow() const;
+    private:
+        GLFWwindow* window;
+    };
+
     struct DeviceContextCreateInfo
     {
         const char* applicationName;
@@ -182,17 +192,6 @@ namespace silk
         std::vector<VkFramebuffer> framebuffers;
         void create(GLFWwindow* window, const DeviceContext& deviceContext, VkRenderPass renderPass);
         void destroy();
-    };
-
-    template <typename T>
-    concept VertexInput = requires {
-        { T::getBindingDescription() } -> std::same_as<VkVertexInputBindingDescription>;
-        { T::getAttributeDescriptions() } -> std::same_as<std::vector<VkVertexInputAttributeDescription>>;
-    };
-
-    template <typename T>
-    concept PushConstant = requires {
-        { T::getStageFlags() } -> std::same_as<VkShaderStageFlags>;
     };
 
     struct PipelineContextCreateInfo

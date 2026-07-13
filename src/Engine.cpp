@@ -288,6 +288,25 @@ namespace silk
         return VK_FALSE;
     }
 
+    WindowContext::WindowContext(float width, float height, const char *title)
+    {
+        glfwInit();
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        window = glfwCreateWindow(width, height, title, nullptr, nullptr);
+
+        std::cout << "Create WindowContext\n";
+    }
+
+    WindowContext::~WindowContext()
+    {
+        glfwDestroyWindow(window);
+        glfwTerminate();
+
+        std::cout << "Destroy WindowContext\n";
+    }
+    
+    GLFWwindow* WindowContext::getWindow() const { return window; }
+
     DeviceContext::DeviceContext(GLFWwindow* window, const DeviceContextCreateInfo& createInfo) : enableValidationLayers(createInfo.enableValidationLayers)
     {
         // create VkInstance
