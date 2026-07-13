@@ -90,81 +90,9 @@ int main()
 
     silk::DeviceContext deviceContext(windowContext.getWindow(), deviceContextCreateInfo);
 
-    // create VkRenderPass
-    // TODO https://docs.vulkan.org/guide/latest/deprecated.html#render_pass_objects_replacement
-    VkRenderPass renderPass;
-    {
-        VkSurfaceFormatKHR surfaceFormat = silk::getPhysicalDeviceSurfaceFormat(deviceContext.getPhysicalDevice(), deviceContext.getSurface());
+    silk::RenderPassContext renderPassContext(deviceContext);
 
-        VkAttachmentDescription colorAttachmentDescription{};
-        colorAttachmentDescription.format = surfaceFormat.format;
-        colorAttachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachmentDescription.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachmentDescription.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-        VkAttachmentReference colorAttachmentReference{};
-        colorAttachmentReference.attachment = 0;
-        colorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkAttachmentDescription depthAttachmentDescription{};
-        depthAttachmentDescription.flags = 0;
-        depthAttachmentDescription.format = silk::getDepthFormat(deviceContext.getPhysicalDevice());
-        depthAttachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
-        depthAttachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthAttachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        depthAttachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthAttachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAttachmentDescription.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        depthAttachmentDescription.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-        VkAttachmentReference depthAttachmentReference{};
-        depthAttachmentReference.attachment = 1;
-        depthAttachmentReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-        VkSubpassDescription subpass{};
-        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentReference;
-        subpass.pDepthStencilAttachment = &depthAttachmentReference;
-
-        std::vector<VkAttachmentDescription> attachmentDescriptions{ colorAttachmentDescription, depthAttachmentDescription };
-
-        VkSubpassDependency colorDependency{};
-        colorDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        colorDependency.dstSubpass = 0;
-        colorDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        colorDependency.srcAccessMask = 0;
-        colorDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        colorDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-        VkSubpassDependency depthDependency{};
-        depthDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        depthDependency.dstSubpass = 0;
-        depthDependency.srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        depthDependency.srcAccessMask = 0;
-        depthDependency.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        depthDependency.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-
-        std::vector<VkSubpassDependency> subpassDependencies{ colorDependency, depthDependency };
-
-        VkRenderPassCreateInfo renderPassCreateInfo{};
-        renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassCreateInfo.attachmentCount = attachmentDescriptions.size();
-        renderPassCreateInfo.pAttachments = attachmentDescriptions.data();
-        renderPassCreateInfo.subpassCount = 1;
-        renderPassCreateInfo.pSubpasses = &subpass;
-        renderPassCreateInfo.dependencyCount = subpassDependencies.size();
-        renderPassCreateInfo.pDependencies = subpassDependencies.data();
-
-        VK_CHECK(vkCreateRenderPass(deviceContext.getDevice(), &renderPassCreateInfo, nullptr, &renderPass));
-    }
-
-    // create SwapchainContext
-    silk::SwapchainContext swapchainContext(windowContext.getWindow(), deviceContext, renderPass);
+    silk::SwapchainContext swapchainContext(windowContext.getWindow(), deviceContext, renderPassContext.getRenderPass());
 
     // create VkDescriptorSetLayout
     VkDescriptorSetLayout descriptorSetLayout;
@@ -238,7 +166,7 @@ int main()
     pipelineContextCreateInfo.vertexInputBindingDescriptions = { Vertex::getBindingDescription() };
     pipelineContextCreateInfo.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptions();
 
-    silk::PipelineContext pipelineContext(deviceContext.getDevice(), renderPass, pipelineContextCreateInfo);
+    silk::PipelineContext pipelineContext(deviceContext.getDevice(), renderPassContext.getRenderPass(), pipelineContextCreateInfo);
 
     // create VkCommandPool
     VkCommandPool commandPool;
@@ -500,7 +428,7 @@ int main()
 
                 if (result == VK_ERROR_OUT_OF_DATE_KHR)
                 {
-                    swapchainContext.recreate(windowContext.getWindow(), deviceContext, renderPass);
+                    swapchainContext.recreate(windowContext.getWindow(), deviceContext, renderPassContext.getRenderPass());
                     continue;
                 }
                 else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
@@ -520,7 +448,7 @@ int main()
 
                 VkRenderPassBeginInfo renderPassBeginInfo{};
                 renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-                renderPassBeginInfo.renderPass = renderPass;
+                renderPassBeginInfo.renderPass = renderPassContext.getRenderPass();
                 renderPassBeginInfo.framebuffer = swapchainContext.getFramebuffers()[imageIndex];
                 renderPassBeginInfo.renderArea.offset = {0, 0};
                 renderPassBeginInfo.renderArea.extent = swapchainContext.getExtent();
@@ -597,7 +525,7 @@ int main()
                 if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized)
                 {
                     framebufferResized = false;
-                    swapchainContext.recreate(windowContext.getWindow(), deviceContext, renderPass);
+                    swapchainContext.recreate(windowContext.getWindow(), deviceContext, renderPassContext.getRenderPass());
                 }
                 else if (result != VK_SUCCESS)
                 {
@@ -631,9 +559,6 @@ int main()
 
     // destroy VkDescriptorSetLayout
     vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
-
-    // destroy renderPass
-    vkDestroyRenderPass(device, renderPass, nullptr);
 
     return EXIT_SUCCESS;
 }

@@ -153,6 +153,17 @@ namespace silk
         uint32_t presentQueueFamilyIndex;
     };
 
+    class RenderPassContext
+    {
+    public:
+        RenderPassContext(const DeviceContext& deviceContext);
+        ~RenderPassContext();
+        VkRenderPass getRenderPass() const;
+    private:
+        VkDevice device;
+        VkRenderPass renderPass;
+    };
+
     struct ImageViewContextCreateInfo
     {
         VkImage image;

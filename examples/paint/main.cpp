@@ -25,6 +25,9 @@ int main()
 
     silk::DeviceContext deviceContext(windowContext.getWindow(), deviceContextCreateInfo);
 
+    silk::RenderPassContext renderPassContext(deviceContext);
+
+    silk::SwapchainContext swapchainContext(windowContext.getWindow(), deviceContext, renderPassContext.getRenderPass());
 
     return EXIT_SUCCESS;
 }
