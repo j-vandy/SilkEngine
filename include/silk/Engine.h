@@ -195,68 +195,12 @@ namespace silk
         { T::getStageFlags() } -> std::same_as<VkShaderStageFlags>;
     };
 
-    class PipelineContextCreateInfo
+    struct PipelineContextCreateInfo
     {
-    public:
         std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
         std::vector<VkPushConstantRange> pushConstantRanges;
-        VkPipelineVertexInputStateCreateInfo vertexInputCreateInfo;
-
-        template <typename VertexInputPack, typename PushConstantPack>
-            requires(std::tuple_size_v<VertexInputPack> > 0)
-        static PipelineContextCreateInfo build(const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts)
-        {
-            PipelineContextCreateInfo createInfo{};
-            createInfo.descriptorSetLayouts = descriptorSetLayouts;
-
-            // push constant ranges
-            [&createInfo]<std::size_t... PCIndices>(std::index_sequence<PCIndices...>)
-            {
-                (
-                    createInfo.pushConstantRanges.push_back(
-                        VkPushConstantRange
-                        {
-                            std::tuple_element_t<PCIndices, PushConstantPack>::getStageFlags(),
-                            0,
-                            static_cast<uint32_t>(sizeof(std::tuple_element_t<PCIndices, PushConstantPack>))
-                        }
-                    ),
-                    ...
-                );
-            }(std::make_index_sequence<std::tuple_size_v<PushConstantPack>>{});
-
-            // vertex input create info
-            createInfo.vertexInputCreateInfo = VkPipelineVertexInputStateCreateInfo{};
-            createInfo.vertexInputCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-            // Process vertex inputs
-            [&createInfo]<std::size_t... VIIndices>(std::index_sequence<VIIndices...>) {
-                (
-                    [&] {
-                        using VI = std::tuple_element_t<VIIndices, VertexInputPack>;
-                        createInfo.vertexBindingDescriptions.push_back(VI::getBindingDescription());
-                        auto attributes = VI::getAttributeDescriptions();
-                        createInfo.vertexAttributeDescriptions.insert(createInfo.vertexAttributeDescriptions.end(), attributes.begin(), attributes.end());
-                    }(),
-                    ...
-                );
-            }(std::make_index_sequence<std::tuple_size_v<VertexInputPack>>{});
-
-            if (createInfo.vertexBindingDescriptions.size() <= 0 || createInfo.vertexAttributeDescriptions.size() <= 0)
-            {
-                throw std::runtime_error("Error: failed to get VkVertexInputBindingDescriptions or VkVertexInputAttributeDescription!");
-            }
-
-            createInfo.vertexInputCreateInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(createInfo.vertexBindingDescriptions.size());
-            createInfo.vertexInputCreateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(createInfo.vertexAttributeDescriptions.size());
-            createInfo.vertexInputCreateInfo.pVertexBindingDescriptions = createInfo.vertexBindingDescriptions.data();
-            createInfo.vertexInputCreateInfo.pVertexAttributeDescriptions = createInfo.vertexAttributeDescriptions.data();
-
-            return createInfo;
-        }
-    private:
-        std::vector<VkVertexInputBindingDescription> vertexBindingDescriptions;
-        std::vector<VkVertexInputAttributeDescription> vertexAttributeDescriptions;
+        std::vector<VkVertexInputBindingDescription> vertexInputBindingDescriptions;
+        std::vector<VkVertexInputAttributeDescription> vertexInputAttributeDescriptions;
     };
 
     // NOTE: does not need to be rebuilt at runtime

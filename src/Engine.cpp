@@ -877,11 +877,18 @@ namespace silk
 
         VK_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout));
 
+        VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo{};
+        vertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vertexInputStateCreateInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(createInfo.vertexInputBindingDescriptions.size());
+        vertexInputStateCreateInfo.pVertexBindingDescriptions = createInfo.vertexInputBindingDescriptions.data();
+        vertexInputStateCreateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(createInfo.vertexInputAttributeDescriptions.size());
+        vertexInputStateCreateInfo.pVertexAttributeDescriptions = createInfo.vertexInputAttributeDescriptions.data();
+
         VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo{};
         graphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         graphicsPipelineCreateInfo.stageCount = 2;
         graphicsPipelineCreateInfo.pStages = shaderStages;
-        graphicsPipelineCreateInfo.pVertexInputState = &createInfo.vertexInputCreateInfo;
+        graphicsPipelineCreateInfo.pVertexInputState = &vertexInputStateCreateInfo;
         graphicsPipelineCreateInfo.pInputAssemblyState = &inputAssemblyCreateInfo;
         graphicsPipelineCreateInfo.pViewportState = &viewportCreateInfo;
         graphicsPipelineCreateInfo.pRasterizationState = &rasterizationCreateInfo;

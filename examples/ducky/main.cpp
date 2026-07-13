@@ -227,13 +227,23 @@ int main()
     {
         glm::mat4 model = glm::mat4(1.0f);
         glm::mat4 normal = glm::mat4(1.0f);
-
-        static VkShaderStageFlags getStageFlags() { return VK_SHADER_STAGE_VERTEX_BIT; }
+        
+        static VkPushConstantRange getPushConstantRange()
+        {
+            return VkPushConstantRange
+            {
+                VK_SHADER_STAGE_VERTEX_BIT,
+                0,
+                static_cast<uint32_t>(sizeof(ModelPC))
+            };
+        }
     };
 
-    using VertexInputPack = std::tuple<Vertex>;
-    using PushConstantPack = std::tuple<ModelPC>;
-    auto pipelineContextCreateInfo = silk::PipelineContextCreateInfo::build<VertexInputPack, PushConstantPack>({ descriptorSetLayout });
+    silk::PipelineContextCreateInfo pipelineContextCreateInfo{};
+    pipelineContextCreateInfo.descriptorSetLayouts = { descriptorSetLayout };
+    pipelineContextCreateInfo.pushConstantRanges = { ModelPC::getPushConstantRange() };
+    pipelineContextCreateInfo.vertexInputBindingDescriptions = { Vertex::getBindingDescription() };
+    pipelineContextCreateInfo.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptions();
 
     silk::PipelineContext pipelineContext(deviceContext.getDevice(), renderPass, pipelineContextCreateInfo);
 
