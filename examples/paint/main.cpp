@@ -36,5 +36,7 @@ int main()
 
     silk::PipelineContext pipelineContext(deviceContext.getDevice(), renderPassContext.getRenderPass(), pipelineContextCreateInfo);
 
+    silk::CommandPoolContext commandPoolContext(deviceContext);
+
     return EXIT_SUCCESS;
 }

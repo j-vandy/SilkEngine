@@ -127,7 +127,6 @@ namespace silk
         const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
     };
 
-    // NOTE: does not need to be rebuilt at runtime
     class DeviceContext
     {
     public:
@@ -181,7 +180,8 @@ namespace silk
         VkDevice device;
         VkImageView imageView;
     };
-    
+   
+    // NOTE: DOES NEED TO BE REBUILT DURING RUNTIME!
     class SwapchainContext
     {
     public:
@@ -224,7 +224,6 @@ namespace silk
         std::vector<VkVertexInputAttributeDescription> vertexInputAttributeDescriptions;
     };
 
-    // NOTE: does not need to be rebuilt at runtime
     class PipelineContext
     {
     public:
@@ -238,7 +237,17 @@ namespace silk
         VkPipeline pipeline;
     };
 
-    // NOTE: does not need to be rebuilt at runtime
+    class CommandPoolContext
+    {
+    public:
+        CommandPoolContext(const DeviceContext& deviceContext);
+        ~CommandPoolContext();
+        VkCommandPool getCommandPool() const;
+    private:
+        VkDevice device;
+        VkCommandPool commandPool;
+    };
+
     template <typename T>
     class DeviceLocalBufferContext
     {
@@ -278,7 +287,6 @@ namespace silk
         VkDeviceMemory bufferMemory;
     };
 
-    // NOTE: does not need to be rebuilt at runtime
     template <typename T>
     class HostVisibleBufferContext
     {
@@ -314,7 +322,6 @@ namespace silk
         void* bufferMapped;
     };
 
-    // NOTE: does not need to be rebuilt at runtime
     class DeviceLocalImageContext
     {
     public:
@@ -329,19 +336,4 @@ namespace silk
         std::optional<ImageViewContext> imageViewContext;
         VkSampler sampler;
     };
-
-    // struct Camera
-    // {
-    //     float fovYAxis;
-    //     glm::mat4 getOrthoMatrix(uint32_t screenWidth, uint32_t screenHeight) const;
-    //     Camera(float fovy = 1.0f) : fovYAxis(fovy) {}
-    // };
-
-    // struct InstanceData
-    // {
-    //     glm::mat4 model;
-    //     glm::vec4 tint;
-    //     static VkVertexInputBindingDescription getBindingDescription(uint32_t binding = 0);
-    //     static std::array<VkVertexInputAttributeDescription, 5> getAttributeDescriptions(uint32_t binding = 0, uint32_t location = 0);
-    // };
 }

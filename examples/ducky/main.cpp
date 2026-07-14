@@ -145,16 +145,7 @@ int main()
 
     silk::PipelineContext pipelineContext(deviceContext.getDevice(), renderPassContext.getRenderPass(), pipelineContextCreateInfo);
 
-    // create VkCommandPool
-    VkCommandPool commandPool;
-    {
-        VkCommandPoolCreateInfo commandPoolCreateInfo{};
-        commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        commandPoolCreateInfo.queueFamilyIndex = deviceContext.getGraphicsQueueFamilyIndex();
-
-        VK_CHECK(vkCreateCommandPool(deviceContext.getDevice(), &commandPoolCreateInfo, nullptr, &commandPool));
-    }
+    silk::CommandPoolContext commandPoolContext(deviceContext);
 
     // load Rubber Ducky gltf model
     const std::string FILENAME = ".\\model\\Duck.gltf";
@@ -173,11 +164,11 @@ int main()
         vertices[i].uv = uvs[i];
     }
 
-    silk::DeviceLocalBufferContext<Vertex> vertexBufferContext(deviceContext, commandPool, vertices, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    silk::DeviceLocalBufferContext<Vertex> vertexBufferContext(deviceContext, commandPoolContext.getCommandPool(), vertices, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
     // create index buffer
     const std::vector<uint16_t> indices = silk::getGLTFModelIndices(model);
-    silk::DeviceLocalBufferContext<uint16_t> indexBufferContext(deviceContext, commandPool, indices, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+    silk::DeviceLocalBufferContext<uint16_t> indexBufferContext(deviceContext, commandPoolContext.getCommandPool(), indices, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
     // create texture image
     tinygltf::Image tinyImage;
@@ -188,28 +179,8 @@ int main()
         tinyImage = model.images[texture.source];
     }
 
-    silk::DeviceLocalImageContext albedoTexContext(deviceContext, commandPool, tinyImage);
+    silk::DeviceLocalImageContext albedoTexContext(deviceContext, commandPoolContext.getCommandPool(), tinyImage);
     
-    // create (instance) VkBuffer
-    const int MAX_FRAMES_IN_FLIGHT = 2;
-    // uint32_t maxInstances = 100;
-    // std::vector<uint32_t> instanceCounts;
-    // std::vector<VkBuffer> instanceBuffers;
-    // std::vector<VkDeviceMemory> instanceBuffersMemory;
-    // std::vector<void*> instanceBuffersMapped;
-    // {
-    //     instanceCounts.resize(MAX_FRAMES_IN_FLIGHT);
-    //     instanceBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    //     instanceBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    //     instanceBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
-
-    //     VkDeviceSize instanceBufferSize = sizeof(silk::InstanceData) * maxInstances;
-    //     for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
-    //     {
-    //         VK_CHECK(silk::createBuffer(physicalDevice, device, instanceBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, instanceBuffers[i], instanceBuffersMemory[i]));
-    //         VK_CHECK(vkMapMemory(device, instanceBuffersMemory[i], 0, instanceBufferSize, 0, &instanceBuffersMapped[i]));
-    //     }
-    // }
 
     struct CameraUBO
     {
@@ -219,6 +190,7 @@ int main()
 
     // create uniform buffer
     std::vector<silk::HostVisibleBufferContext<CameraUBO>> cameraUBOBufferContexts;
+    const int MAX_FRAMES_IN_FLIGHT = 2;
     cameraUBOBufferContexts.reserve(MAX_FRAMES_IN_FLIGHT);
     for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
     {
@@ -298,7 +270,7 @@ int main()
 
         VkCommandBufferAllocateInfo commandBufferAllocateInfo{};
         commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        commandBufferAllocateInfo.commandPool = commandPool;
+        commandBufferAllocateInfo.commandPool = commandPoolContext.getCommandPool();
         commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         commandBufferAllocateInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers.size());
 
@@ -530,9 +502,6 @@ int main()
 
     // destroy VkDescriptorPool
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-
-    // destroy VkCommandPool
-    vkDestroyCommandPool(device, commandPool, nullptr);
 
     return EXIT_SUCCESS;
 }

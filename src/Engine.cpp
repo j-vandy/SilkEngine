@@ -626,6 +626,7 @@ namespace silk
 
     RenderPassContext::~RenderPassContext()
     {
+        vkDeviceWaitIdle(device);
         vkDestroyRenderPass(device, renderPass, nullptr);
 
         std::cout << "Destroy RenderPassContext\n";
@@ -910,6 +911,7 @@ namespace silk
 
     DescriptorSetLayoutContext::~DescriptorSetLayoutContext()
     {
+        vkDeviceWaitIdle(device);
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
         std::cout << "Destroy DescriptorSetLayoutContext\n";
@@ -1057,6 +1059,27 @@ namespace silk
     VkPipelineLayout PipelineContext::getPipelineLayout() const { return pipelineLayout; }
 
     VkPipeline PipelineContext::getPipeline() const { return pipeline; }
+
+    CommandPoolContext::CommandPoolContext(const DeviceContext& deviceContext) : device(deviceContext.getDevice())
+    {
+        VkCommandPoolCreateInfo commandPoolCreateInfo{};
+        commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        commandPoolCreateInfo.queueFamilyIndex = deviceContext.getGraphicsQueueFamilyIndex();
+
+        VK_CHECK(vkCreateCommandPool(device, &commandPoolCreateInfo, nullptr, &commandPool));
+
+        std::cout << "Create CommandPoolContext\n";
+    }
+
+    CommandPoolContext::~CommandPoolContext()
+    {
+        vkDeviceWaitIdle(device);
+        vkDestroyCommandPool(device, commandPool, nullptr);
+        std::cout << "Destroy CommandPoolContext\n";
+    }
+
+    VkCommandPool CommandPoolContext::getCommandPool() const { return commandPool; }
 
     struct TransitionImageMemoryBarrierInfo
     {
