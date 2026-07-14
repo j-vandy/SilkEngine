@@ -205,6 +205,17 @@ namespace silk
         void destroy();
     };
 
+    class DescriptorSetLayoutContext
+    {
+    public:
+        DescriptorSetLayoutContext(const VkDevice device);
+        ~DescriptorSetLayoutContext();
+        VkDescriptorSetLayout getDescriptorSetLayout() const;
+    private:
+        VkDevice device;
+        VkDescriptorSetLayout descriptorSetLayout;
+    };
+
     struct PipelineContextCreateInfo
     {
         std::vector<VkDescriptorSetLayout> descriptorSetLayouts;

@@ -882,6 +882,41 @@ namespace silk
         std::cout << "Destroy SwapchainContext\n";
     }
 
+    DescriptorSetLayoutContext::DescriptorSetLayoutContext(const VkDevice device)
+    {
+        VkDescriptorSetLayoutBinding uboLayoutBinding{};
+        uboLayoutBinding.binding = 0;
+        uboLayoutBinding.descriptorCount = 1;
+        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+        VkDescriptorSetLayoutBinding samplerBinding{};
+        samplerBinding.binding = 1;
+        samplerBinding.descriptorCount = 1;
+        samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        std::vector<VkDescriptorSetLayoutBinding> bindings{ uboLayoutBinding, samplerBinding };
+
+        VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{};
+        descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        descriptorSetLayoutCreateInfo.bindingCount = bindings.size();
+        descriptorSetLayoutCreateInfo.pBindings = bindings.data();
+
+        VK_CHECK(vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCreateInfo, nullptr, &descriptorSetLayout));
+
+        std::cout << "Create DescriptorSetLayoutContext\n";
+    }
+
+    DescriptorSetLayoutContext::~DescriptorSetLayoutContext()
+    {
+        vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+
+        std::cout << "Destroy DescriptorSetLayoutContext\n";
+    }
+
+    VkDescriptorSetLayout DescriptorSetLayoutContext::getDescriptorSetLayout() const { return descriptorSetLayout; }
+
     // TODO https://docs.vulkan.org/guide/latest/deprecated.html#pipelines_shader_objects_replacement
     PipelineContext::PipelineContext(VkDevice device, VkRenderPass renderPass, const PipelineContextCreateInfo& createInfo) : device(device)
     {

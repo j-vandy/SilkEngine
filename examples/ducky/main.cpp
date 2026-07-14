@@ -94,30 +94,7 @@ int main()
 
     silk::SwapchainContext swapchainContext(windowContext.getWindow(), deviceContext, renderPassContext.getRenderPass());
 
-    // create VkDescriptorSetLayout
-    VkDescriptorSetLayout descriptorSetLayout;
-    {
-        VkDescriptorSetLayoutBinding uboLayoutBinding{};
-        uboLayoutBinding.binding = 0;
-        uboLayoutBinding.descriptorCount = 1;
-        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-        VkDescriptorSetLayoutBinding samplerBinding{};
-        samplerBinding.binding = 1;
-        samplerBinding.descriptorCount = 1;
-        samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-        std::vector<VkDescriptorSetLayoutBinding> bindings{ uboLayoutBinding, samplerBinding };
-
-        VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{};
-        descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        descriptorSetLayoutCreateInfo.bindingCount = bindings.size();
-        descriptorSetLayoutCreateInfo.pBindings = bindings.data();
-
-        VK_CHECK(vkCreateDescriptorSetLayout(deviceContext.getDevice(), &descriptorSetLayoutCreateInfo, nullptr, &descriptorSetLayout));
-    }
+    silk::DescriptorSetLayoutContext descriptorSetLayoutContext(deviceContext.getDevice());
 
     struct Vertex
     {
@@ -161,7 +138,7 @@ int main()
     };
 
     silk::PipelineContextCreateInfo pipelineContextCreateInfo{};
-    pipelineContextCreateInfo.descriptorSetLayouts = { descriptorSetLayout };
+    pipelineContextCreateInfo.descriptorSetLayouts = { descriptorSetLayoutContext.getDescriptorSetLayout() };
     pipelineContextCreateInfo.pushConstantRanges = { ModelPC::getPushConstantRange() };
     pipelineContextCreateInfo.vertexInputBindingDescriptions = { Vertex::getBindingDescription() };
     pipelineContextCreateInfo.vertexInputAttributeDescriptions = Vertex::getAttributeDescriptions();
@@ -273,7 +250,7 @@ int main()
     // create VkDescriptorSets
     std::vector<VkDescriptorSet> descriptorSets(MAX_FRAMES_IN_FLIGHT);
     {
-        std::vector<VkDescriptorSetLayout> descriptorSetLayouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
+        std::vector<VkDescriptorSetLayout> descriptorSetLayouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayoutContext.getDescriptorSetLayout());
         VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
         descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         descriptorSetAllocateInfo.descriptorPool = descriptorPool;
@@ -556,9 +533,6 @@ int main()
 
     // destroy VkCommandPool
     vkDestroyCommandPool(device, commandPool, nullptr);
-
-    // destroy VkDescriptorSetLayout
-    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
     return EXIT_SUCCESS;
 }

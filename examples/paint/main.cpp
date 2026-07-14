@@ -29,5 +29,12 @@ int main()
 
     silk::SwapchainContext swapchainContext(windowContext.getWindow(), deviceContext, renderPassContext.getRenderPass());
 
+    silk::DescriptorSetLayoutContext descriptorSetLayoutContext(deviceContext.getDevice());
+
+    silk::PipelineContextCreateInfo pipelineContextCreateInfo{};
+    pipelineContextCreateInfo.descriptorSetLayouts = { descriptorSetLayoutContext.getDescriptorSetLayout() };
+
+    silk::PipelineContext pipelineContext(deviceContext.getDevice(), renderPassContext.getRenderPass(), pipelineContextCreateInfo);
+
     return EXIT_SUCCESS;
 }
