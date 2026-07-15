@@ -180,7 +180,6 @@ int main()
     }
 
     silk::DeviceLocalImageContext albedoTexContext(deviceContext, commandPoolContext.getCommandPool(), tinyImage);
-    
 
     struct CameraUBO
     {
@@ -198,26 +197,17 @@ int main()
     }
 
     // create VkDescriptorPool
-    VkDescriptorPool descriptorPool;
-    {
-        VkDescriptorPoolSize uboDescriptorPoolSize{};
-        uboDescriptorPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uboDescriptorPoolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    VkDescriptorPoolSize uboDescriptorPoolSize{};
+    uboDescriptorPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboDescriptorPoolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
-        VkDescriptorPoolSize samplerDescriptorPoolSize{};
-        samplerDescriptorPoolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        samplerDescriptorPoolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    VkDescriptorPoolSize samplerDescriptorPoolSize{};
+    samplerDescriptorPoolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    samplerDescriptorPoolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
-        std::vector<VkDescriptorPoolSize> poolSizes{ uboDescriptorPoolSize, samplerDescriptorPoolSize };
+    std::vector<VkDescriptorPoolSize> poolSizes{ uboDescriptorPoolSize, samplerDescriptorPoolSize };
 
-        VkDescriptorPoolCreateInfo descriptorPoolCreateInfo{};
-        descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        descriptorPoolCreateInfo.poolSizeCount = poolSizes.size();
-        descriptorPoolCreateInfo.pPoolSizes = poolSizes.data();
-        descriptorPoolCreateInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-        VK_CHECK(vkCreateDescriptorPool(deviceContext.getDevice(), &descriptorPoolCreateInfo, nullptr, &descriptorPool));
-    }
+    silk::DescriptorPoolContext descriptorPoolContext(deviceContext.getDevice(), poolSizes, MAX_FRAMES_IN_FLIGHT);
 
     // create VkDescriptorSets
     std::vector<VkDescriptorSet> descriptorSets(MAX_FRAMES_IN_FLIGHT);
@@ -225,7 +215,7 @@ int main()
         std::vector<VkDescriptorSetLayout> descriptorSetLayouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayoutContext.getDescriptorSetLayout());
         VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
         descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        descriptorSetAllocateInfo.descriptorPool = descriptorPool;
+        descriptorSetAllocateInfo.descriptorPool = descriptorPoolContext.getDescriptorPool();
         descriptorSetAllocateInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
         descriptorSetAllocateInfo.pSetLayouts = descriptorSetLayouts.data();
 
@@ -499,9 +489,6 @@ int main()
         vkDestroyFence(device, inFlightFences[i], nullptr);
         vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
     }
-
-    // destroy VkDescriptorPool
-    vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
     return EXIT_SUCCESS;
 }

@@ -38,5 +38,8 @@ int main()
 
     silk::CommandPoolContext commandPoolContext(deviceContext);
 
+    const int MAX_FRAMES_IN_FLIGHT = 2;
+    silk::DescriptorPoolContext descriptorPoolContext(deviceContext.getDevice(), {}, MAX_FRAMES_IN_FLIGHT);
+
     return EXIT_SUCCESS;
 }

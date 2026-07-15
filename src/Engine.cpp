@@ -1259,6 +1259,29 @@ namespace silk
 
     VkImageView DeviceLocalImageContext::getImageView() const { return imageViewContext.has_value() ? imageViewContext->getImageView() : VK_NULL_HANDLE; }
 
+    DescriptorPoolContext::DescriptorPoolContext(VkDevice device, const std::vector<VkDescriptorPoolSize>& poolSizes, uint32_t maxSets) : device(device)
+    {
+        VkDescriptorPoolCreateInfo descriptorPoolCreateInfo{};
+        descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        descriptorPoolCreateInfo.poolSizeCount = poolSizes.size();
+        descriptorPoolCreateInfo.pPoolSizes = poolSizes.data();
+        descriptorPoolCreateInfo.maxSets = maxSets;
+
+        VK_CHECK(vkCreateDescriptorPool(device, &descriptorPoolCreateInfo, nullptr, &descriptorPool));
+
+        std::cout << "Create DescriptorPoolContext\n";
+    }
+
+    DescriptorPoolContext::~DescriptorPoolContext()
+    {
+        vkDeviceWaitIdle(device);
+        vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+        std::cout << "Destroy DescriptorPoolContext\n";
+    }
+
+    VkDescriptorPool DescriptorPoolContext::getDescriptorPool() const { return descriptorPool; }
+
+
     // glm::mat4 Camera::getOrthoMatrix(uint32_t screenWidth, uint32_t screenHeight) const
     // {
     //     float aspect = static_cast<float>(screenWidth) / screenHeight;

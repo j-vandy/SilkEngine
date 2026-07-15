@@ -336,4 +336,15 @@ namespace silk
         std::optional<ImageViewContext> imageViewContext;
         VkSampler sampler;
     };
+
+    class DescriptorPoolContext
+    {
+    public:
+        DescriptorPoolContext(VkDevice device, const std::vector<VkDescriptorPoolSize>& poolSizes, uint32_t maxSets);
+        ~DescriptorPoolContext();
+        VkDescriptorPool getDescriptorPool() const;
+    private:
+        VkDevice device;
+        VkDescriptorPool descriptorPool;
+    };
 }
