@@ -340,11 +340,33 @@ namespace silk
     class DescriptorPoolContext
     {
     public:
-        DescriptorPoolContext(VkDevice device, const std::vector<VkDescriptorPoolSize>& poolSizes, uint32_t maxSets);
+        DescriptorPoolContext(const VkDevice device, const std::vector<VkDescriptorPoolSize>& poolSizes, uint32_t maxSets);
         ~DescriptorPoolContext();
         VkDescriptorPool getDescriptorPool() const;
     private:
         VkDevice device;
         VkDescriptorPool descriptorPool;
     };
-}
+
+    class SemaphoreContext
+    {
+    public:
+        SemaphoreContext(const VkDevice device);
+        ~SemaphoreContext();
+        VkSemaphore getSemaphore() const;
+    private:
+        VkDevice device;
+        VkSemaphore semaphore;
+    };
+
+    class FenceContext
+    {
+    public:
+        FenceContext(const VkDevice device);
+        ~FenceContext();
+        VkFence getFence() const;
+    private:
+        VkDevice device;
+        VkFence fence;
+    };
+ }

@@ -1259,7 +1259,7 @@ namespace silk
 
     VkImageView DeviceLocalImageContext::getImageView() const { return imageViewContext.has_value() ? imageViewContext->getImageView() : VK_NULL_HANDLE; }
 
-    DescriptorPoolContext::DescriptorPoolContext(VkDevice device, const std::vector<VkDescriptorPoolSize>& poolSizes, uint32_t maxSets) : device(device)
+    DescriptorPoolContext::DescriptorPoolContext(const VkDevice device, const std::vector<VkDescriptorPoolSize>& poolSizes, uint32_t maxSets) : device(device)
     {
         VkDescriptorPoolCreateInfo descriptorPoolCreateInfo{};
         descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1281,108 +1281,42 @@ namespace silk
 
     VkDescriptorPool DescriptorPoolContext::getDescriptorPool() const { return descriptorPool; }
 
+    SemaphoreContext::SemaphoreContext(const VkDevice device) : device(device)
+    {
+        VkSemaphoreCreateInfo semaphoreCreateInfo{};
+        semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-    // glm::mat4 Camera::getOrthoMatrix(uint32_t screenWidth, uint32_t screenHeight) const
-    // {
-    //     float aspect = static_cast<float>(screenWidth) / screenHeight;
-    //     float width = fovYAxis * aspect;
-    //     const float Z_NEAR = -1.0f;
-    //     const float Z_FAR = 1.0f;
-    //     return glm::ortho(-width/2.0f, width/2.0f, -fovYAxis/2.0f, fovYAxis/2.0f, Z_NEAR, Z_FAR);
-    // }
+        VK_CHECK(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &semaphore));
 
-    // VkVertexInputBindingDescription InstanceData::getBindingDescription(uint32_t binding)
-    // {
-    //     VkVertexInputBindingDescription bindingDescription{};
-    //     bindingDescription.binding = binding;
-    //     bindingDescription.stride = sizeof(InstanceData);
-    //     bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
-    //     return bindingDescription;
-    // }
+        std::cout << "Create SemaphoreContext\n";
+    }
 
-    // std::array<VkVertexInputAttributeDescription, 5> InstanceData::getAttributeDescriptions(uint32_t binding, uint32_t location)
-    // {
-    //     std::array<VkVertexInputAttributeDescription, 5> attributeDescriptions;
+    SemaphoreContext::~SemaphoreContext()
+    {
+        vkDeviceWaitIdle(device);
+        vkDestroySemaphore(device, semaphore, nullptr);
+        std::cout << "Destroy SemaphoreContext\n";
+    }
 
-    //     for (size_t i = 0; i < 4; i++)
-    //     {
-    //         attributeDescriptions[i].location = location + i;
-    //         attributeDescriptions[i].binding = binding;
-    //         attributeDescriptions[i].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-    //         attributeDescriptions[i].offset = offsetof(InstanceData, model) + sizeof(glm::vec4) * i;
-    //     }
+    VkSemaphore SemaphoreContext::getSemaphore() const { return semaphore; }
 
-    //     attributeDescriptions[4].location = location + 4;
-    //     attributeDescriptions[4].binding = binding;
-    //     attributeDescriptions[4].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-    //     attributeDescriptions[4].offset = offsetof(InstanceData, tint);
+    FenceContext::FenceContext(const VkDevice device) : device(device)
+    {
+        VkFenceCreateInfo fenceCreateInfo{};
+        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    //     return attributeDescriptions;
-    // }
+        VK_CHECK(vkCreateFence(device, &fenceCreateInfo, nullptr, &fence));
 
-    // void Engine::updateInstanceBuffer(const std::vector<InstanceData>& instances)
-    // {
-    //     size_t instancesSize = instances.size();
-    //     if (instancesSize > maxInstances)
-    //     {
-    //         std::cout << "RECREATE INSTANCE BUFFER!" << std::endl;
-    //         vkDeviceWaitIdle(device);
-    //         cleanupInstanceBuffers();
+        std::cout << "Create FenceContext\n";
+    }
 
-    //         maxInstances = instancesSize * 2;
-    //         if (createInstanceBuffers() != VK_SUCCESS)
-    //         {
-    //             std::runtime_error("Error: failed to create instance buffers!");
-    //         }
-    //     }
+    FenceContext::~FenceContext()
+    {
+        vkDeviceWaitIdle(device);
+        vkDestroyFence(device, fence, nullptr);
+        std::cout << "Destroy FenceContext\n";
+    }
 
-    //     instanceCounts[currentFrame] = instancesSize;
-    //     memcpy(instanceBuffersMapped[currentFrame], instances.data(), instancesSize * sizeof(instances[0]));
-    // }
-
-    // void Engine::getCursorWorldSpace(silk::Scene& scene, const silk::Entity& cam, float* x, float* y) const
-    // {
-    //     double screenPosX, screenPosY;
-    //     glfwGetCursorPos(window, &screenPosX, &screenPosY);
-    //     glm::vec4 screenSpace = glm::vec4(static_cast<float>(screenPosX), static_cast<float>(screenPosY), 0.0f, 1.0f);
-
-    //     glm::mat4 invViewport = glm::scale(glm::mat4(1.0f), glm::vec3(2/static_cast<float>(swapchainExtent.width), -2/static_cast<float>(swapchainExtent.height),1.0f));
-    //     invViewport[3] = glm::vec4(-1.0f, 1.0f, 0.0f, 1.0f);
-
-    //     glm::mat4 invProj = glm::inverse(scene.getComponent<Camera>(cam).getOrthoMatrix(swapchainExtent.width, swapchainExtent.height));
-    //     glm::mat4 invView = scene.getComponent<silk::Transform>(cam).getMatrix();
-    //     glm::vec4 worldSpace = invView * invProj * invViewport * screenSpace;
-
-    //     *x = worldSpace.x;
-    //     *y = worldSpace.y;
-    // }
-
-    // GLFWkeyfun Engine::setKeyCallback(GLFWkeyfun callback)
-    // {
-    //     return glfwSetKeyCallback(window, callback);
-    // }
-
-    // GLFWmousebuttonfun Engine::setMouseButtonCallback(GLFWmousebuttonfun callback)
-    // {
-    //     return glfwSetMouseButtonCallback(window, callback);
-    // }
-
-    // VkResult Engine::createInstanceBuffers()
-    // {
-    //     VkDeviceSize instanceBufferSize = sizeof(InstanceData) * maxInstances;
-    //     for (size_t i = 0; i < static_cast<size_t>(MAX_FRAMES_IN_FLIGHT); i++)
-    //     {
-    //         VkResult result = createBuffer(instanceBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, instanceBuffers[i], instanceBuffersMemory[i]);
-    //         if (result != VK_SUCCESS)
-    //         {
-    //             return result;
-    //         }
-    //         result = vkMapMemory(device, instanceBuffersMemory[i], 0, instanceBufferSize, 0, &instanceBuffersMapped[i]);
-    //         if (result != VK_SUCCESS)
-    //         {
-    //             return result;
-    //         }
-    //     }
-    //     return VK_SUCCESS;
-    // }
+    VkFence FenceContext::getFence() const { return fence; }
 }
