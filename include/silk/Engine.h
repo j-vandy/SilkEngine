@@ -210,7 +210,7 @@ namespace silk
     class DescriptorSetLayoutContext
     {
     public:
-        DescriptorSetLayoutContext(const VkDevice device);
+        DescriptorSetLayoutContext(const VkDevice device, const std::vector<VkDescriptorSetLayoutBinding>& bindings);
         ~DescriptorSetLayoutContext();
         VkDescriptorSetLayout getDescriptorSetLayout() const;
     private:

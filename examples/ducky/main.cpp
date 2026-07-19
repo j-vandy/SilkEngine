@@ -94,7 +94,22 @@ int main()
 
     silk::SwapchainContext swapchainContext(windowContext.getWindow(), deviceContext, renderPassContext.getRenderPass());
 
-    silk::DescriptorSetLayoutContext descriptorSetLayoutContext(deviceContext.getDevice());
+    // create DescriptorSetLayoutContext
+    VkDescriptorSetLayoutBinding uboLayoutBinding{};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutBinding samplerBinding{};
+    samplerBinding.binding = 1;
+    samplerBinding.descriptorCount = 1;
+    samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    std::vector<VkDescriptorSetLayoutBinding> bindings{ uboLayoutBinding, samplerBinding };
+
+    silk::DescriptorSetLayoutContext descriptorSetLayoutContext(deviceContext.getDevice(), bindings);
 
     struct Vertex
     {
@@ -275,7 +290,7 @@ int main()
     {
         renderFinishedSemaphores.emplace_back(deviceContext.getDevice());
     }
-    
+
 
     const float FOVY = 60.0f;
     const float Z_NEAR = 0.1f;

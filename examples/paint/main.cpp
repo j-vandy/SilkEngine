@@ -37,10 +37,26 @@ int main()
 
     silk::SwapchainContext swapchainContext(windowContext.getWindow(), deviceContext, renderPassContext.getRenderPass());
 
-    silk::DescriptorSetLayoutContext descriptorSetLayoutContext(deviceContext.getDevice());
+    silk::DescriptorSetLayoutContext descriptorSetLayoutContext(deviceContext.getDevice(), {});
+
+    struct BrushPC
+    {
+        glm::vec2 position;
+        
+        static VkPushConstantRange getPushConstantRange()
+        {
+            return VkPushConstantRange
+            {
+                VK_SHADER_STAGE_FRAGMENT_BIT,
+                0,
+                static_cast<uint32_t>(sizeof(BrushPC))
+            };
+        }
+    } brushPC;
 
     silk::PipelineContextCreateInfo pipelineContextCreateInfo{};
     pipelineContextCreateInfo.descriptorSetLayouts = { descriptorSetLayoutContext.getDescriptorSetLayout() };
+    pipelineContextCreateInfo.pushConstantRanges = { BrushPC::getPushConstantRange() };
 
     silk::PipelineContext pipelineContext(deviceContext.getDevice(), renderPassContext.getRenderPass(), pipelineContextCreateInfo);
 
@@ -79,6 +95,11 @@ int main()
         while(!glfwWindowShouldClose(windowContext.getWindow()))
         {
             glfwPollEvents();
+
+            // update ModelPC
+            double xpos, ypos;
+            glfwGetCursorPos(windowContext.getWindow(), &xpos, &ypos);
+            brushPC.position = glm::vec2(static_cast<float>(xpos), static_cast<float>(ypos));
 
             // draw frame
             {
@@ -139,6 +160,8 @@ int main()
                     scissor.offset = {0, 0};
                     scissor.extent = swapchainContext.getExtent();
                     vkCmdSetScissor(commandBuffers[currentFrame], 0, 1, &scissor);
+
+                    vkCmdPushConstants(commandBuffers[currentFrame], pipelineContext.getPipelineLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(BrushPC), &brushPC);
 
                     vkCmdDraw(commandBuffers[currentFrame], 6, 1, 0, 0);
 
