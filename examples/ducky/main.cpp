@@ -254,18 +254,8 @@ int main()
     }
 
     // allocate VkCommandBuffer
-    std::vector<VkCommandBuffer> commandBuffers;
-    {
-        commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-
-        VkCommandBufferAllocateInfo commandBufferAllocateInfo{};
-        commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        commandBufferAllocateInfo.commandPool = commandPoolContext.getCommandPool();
-        commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        commandBufferAllocateInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers.size());
-
-        VK_CHECK(vkAllocateCommandBuffers(deviceContext.getDevice(), &commandBufferAllocateInfo, commandBuffers.data()));
-    }
+    std::vector<VkCommandBuffer> commandBuffers(MAX_FRAMES_IN_FLIGHT);
+    VK_CHECK(silk::allocateCommandBuffers(deviceContext.getDevice(), commandPoolContext.getCommandPool(), commandBuffers));
 
     // create synchronization objects
     std::vector<silk::SemaphoreContext> imageAvailableSemaphores;
@@ -282,7 +272,10 @@ int main()
     const size_t swapchainImageCount = swapchainContext.getSwapchainImageCount();
     renderFinishedSemaphores.reserve(swapchainImageCount);
     for (size_t i = 0; i < swapchainImageCount; i++)
+    {
         renderFinishedSemaphores.emplace_back(deviceContext.getDevice());
+    }
+    
 
     const float FOVY = 60.0f;
     const float Z_NEAR = 0.1f;

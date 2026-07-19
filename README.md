@@ -1,11 +1,11 @@
 # SilkEngine  
-Flatland Radiance Cascades rendering engine built on **Vulkan**. This project uses **vcpkg** as the package manager, **CMake** as the build system generator, and **Ninja** as the build system.
 
+SilkEngine is a low-level **Vulkan** wrapper built for building rendering experiments. This project uses **vcpkg** as the package manager, **CMake** as the build system generator, and **Ninja** as the build system. It currently includes a model viewer example called `ducky`. A simple paint program prototype is in development, which will be used for Radiance Cascades experimentation.
 
 ## Installation
 
+### 1. Install Git
 
-### 1. Install Git  
 1. Install [Git](https://git-scm.com/downloads).
 2. Verify install:
     ```powershell
@@ -13,7 +13,8 @@ Flatland Radiance Cascades rendering engine built on **Vulkan**. This project us
     ```
 
 
-### 2. Install GCC (C++ Compiler) & Ninja via MSYS2  
+### 2. Install GCC (C++ Compiler) & Ninja via MSYS2
+
 1. Install [MSYS2](https://www.msys2.org/).
 2. Open the **MSYS2 UCRT64** terminal.
 3. Run:
@@ -35,7 +36,8 @@ Flatland Radiance Cascades rendering engine built on **Vulkan**. This project us
     ```
 
 
-### 3. Install vcpkg  
+### 3. Install vcpkg
+
 1. Open **Command Prompt**.
 2. Run the following commands:
     ```powershell
@@ -53,7 +55,8 @@ Flatland Radiance Cascades rendering engine built on **Vulkan**. This project us
     ```
 
 
-### 4. Install CMake  
+### 4. Install CMake
+
 1. Install [CMake](https://cmake.org/download/).  
 2. **Important:** During installation, select `Add CMake to the system PATH`.
 3. Verify install:

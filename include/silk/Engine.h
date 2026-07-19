@@ -109,6 +109,8 @@ namespace silk
 
     VkResult copyBuffer(const VkDevice device, const VkQueue graphicsQueue, const VkCommandPool commandPool, const VkBuffer srcBuffer, VkBuffer dstBuffer, const VkDeviceSize size);
 
+    VkResult allocateCommandBuffers(const VkDevice device, const VkCommandPool commandPool, std::vector<VkCommandBuffer>& commandBuffers);
+
     class WindowContext
     {
     public:
