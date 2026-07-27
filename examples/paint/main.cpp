@@ -41,7 +41,8 @@ int main()
 
     struct BrushPC
     {
-        glm::vec2 position;
+        glm::vec2 prevPosition;
+        glm::vec2 currPosition;
         
         static VkPushConstantRange getPushConstantRange()
         {
@@ -99,7 +100,8 @@ int main()
             // update ModelPC
             double xpos, ypos;
             glfwGetCursorPos(windowContext.getWindow(), &xpos, &ypos);
-            brushPC.position = glm::vec2(static_cast<float>(xpos), static_cast<float>(ypos));
+            brushPC.prevPosition = brushPC.currPosition;
+            brushPC.currPosition = glm::vec2(static_cast<float>(xpos), static_cast<float>(ypos));
 
             // draw frame
             {
